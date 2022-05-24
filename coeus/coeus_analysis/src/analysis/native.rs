@@ -98,13 +98,13 @@ pub fn find_string_matches_in_elf(
                         Some(symbol_name) => reg.is_match(symbol_name),
                         _ => false,
                     })
-                    .map(|sym| {
-                        Evidence::String(StringEvidence {
-                            content: elf.strtab.get_at(sym.st_name).unwrap().to_string(),
+                    .filter_map(|sym| {
+                        Some(Evidence::String(StringEvidence {
+                            content: elf.strtab.get_at(sym.st_name)?.to_string(),
                             context: Context::NativeSymbol(object.clone(), file_name.to_string()),
                             confidence_level: ConfidenceLevel::Medium,
                             place: Location::NativeSymbol,
-                        })
+                        }))
                     })
                     .collect();
 
@@ -222,7 +222,7 @@ pub fn find_strings(reg: &Regex, bin_elf: Arc<BinaryObject>) -> Vec<Evidence> {
         return vec![];
     };
     let mut evidences = vec![];
-    let regex = regex::bytes::Regex::new(r"(?-u)(?P<cstr>[^\x00]+)\x00").unwrap();
+    let regex = regex::bytes::Regex::new(r"(?-u)(?P<cstr>[^\x00]+)\x00").expect("REGEX IS WRONG");
     for h in &elf.section_headers {
         let name = if let Some(name) = elf.shdr_strtab.get_at(h.sh_name) {
             name
@@ -235,12 +235,11 @@ pub fn find_strings(reg: &Regex, bin_elf: Arc<BinaryObject>) -> Vec<Evidence> {
                     &bin_elf.data()[h.sh_offset as usize..(h.sh_offset + h.sh_size) as usize],
                 )
                 .filter_map(|c| {
-                    if let Ok(cstr) = String::from_utf8(c.name("cstr").unwrap().as_bytes().to_vec()) {
-                        Some((c.name("cstr").unwrap().start(), cstr))
+                    if let Ok(cstr) = String::from_utf8(c.name("cstr")?.as_bytes().to_vec()) {
+                        Some((c.name("cstr")?.start(), cstr))
                     } else {
                         None
                     }
-                    
                 })
                 .collect();
             for (offset, string) in cstrs {
@@ -248,7 +247,13 @@ pub fn find_strings(reg: &Regex, bin_elf: Arc<BinaryObject>) -> Vec<Evidence> {
                     let evidence = StringEvidence {
                         content: string.clone(),
                         place: Location::NativeLibLoad,
-                        context: Context::NativeLib(bin_elf.clone(), string, h.sh_offset +offset as u64, false, Sym::default() ),
+                        context: Context::NativeLib(
+                            bin_elf.clone(),
+                            string,
+                            h.sh_offset + offset as u64,
+                            false,
+                            Sym::default(),
+                        ),
                         confidence_level: ConfidenceLevel::Medium,
                     };
                     evidences.push(Evidence::String(evidence));

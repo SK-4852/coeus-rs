@@ -51,7 +51,7 @@ pub fn parse_dex_buf(
 
     pool_cursor
         .seek(SeekFrom::Start(config.string_ids_off as u64))
-        .unwrap();
+        .ok()?;
 
     let strings = parse_string_table(
         config.string_ids_off,
@@ -61,32 +61,38 @@ pub fn parse_dex_buf(
 
     pool_cursor
         .seek(SeekFrom::Start(config.type_ids_off as u64))
-        .unwrap();
+        .ok()?;
 
     let types = parse_type_table(config.type_ids_size, &mut pool_cursor);
 
     pool_cursor
         .seek(SeekFrom::Start(config.proto_ids_off as u64))
-        .unwrap();
+        .ok()?;
 
     let protos = parse_proto_table(config.proto_ids_size, &mut pool_cursor);
 
     pool_cursor
         .seek(SeekFrom::Start(config.method_ids_off as u64))
-        .unwrap();
+        .ok()?;
 
-    let methods = parse_method_table(config.method_ids_size, &strings, &protos, &types,&mut pool_cursor);
+    let methods = parse_method_table(
+        config.method_ids_size,
+        &strings,
+        &protos,
+        &types,
+        &mut pool_cursor,
+    );
 
     pool_cursor
         .seek(SeekFrom::Start(config.fields_ids_off as u64))
-        .unwrap();
+        .ok()?;
 
     let fields = parse_fields_table(config.fields_ids_size, &mut pool_cursor, &strings);
 
     let mut class_cursor = buffer.get_cursor();
     class_cursor
         .seek(SeekFrom::Start(config.class_defs_off as u64))
-        .unwrap();
+        .ok()?;
 
     let classes = parse_class_def_table(config.class_defs_size, &mut class_cursor);
 
@@ -236,8 +242,6 @@ pub fn parse_dex_buf(
         };
     });
 
-    //ret_classes.sort_by(|a,b| a.class_idx.cmp(&b.class_idx));
-
     Some(DexFile {
         identifier: format!("{:02x?}", config.signature),
         file_name: file_name.to_string(),
@@ -313,10 +317,19 @@ fn parse_method_table<T: Read + Seek>(
         method.method_name = strings[method.name_idx as usize].to_str_lossy().to_string();
 
         let proto = &protos[method.proto_idx as usize];
-        let return_type = strings[types[proto.return_type_idx as usize] as usize].to_str_lossy().to_string();
-        let arg_string = proto.arguments.iter().map(|arg_type| {
-            strings[types[*arg_type as usize] as usize].to_str_lossy().to_string()
-        }).collect::<Vec<_>>().join("");
+        let return_type = strings[types[proto.return_type_idx as usize] as usize]
+            .to_str_lossy()
+            .to_string();
+        let arg_string = proto
+            .arguments
+            .iter()
+            .map(|arg_type| {
+                strings[types[*arg_type as usize] as usize]
+                    .to_str_lossy()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("");
         method.proto_name = format!("({}){}", arg_string, return_type);
         method.method_idx = i as u16;
         methods.push(Arc::new(method));

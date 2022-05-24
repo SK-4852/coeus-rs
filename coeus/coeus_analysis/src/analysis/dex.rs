@@ -127,41 +127,61 @@ pub fn find_cross_reference_array<'a: 'b, 'b>(
             let new_place: Context;
             match place {
                 Context::DexClass(class, dex_file) => {
-                    let (multi_dex, dex_file) = multi_dex
-                        .get_multi_dex_from_dex_identifier(&dex_file.identifier)
-                        .unwrap();
+                    let (multi_dex, dex_file) = if let Some((md, f)) =
+                        multi_dex.get_multi_dex_from_dex_identifier(&dex_file.identifier)
+                    {
+                        (md, f)
+                    } else {
+                        return vec![];
+                    };
                     new_place = Context::DexClass(class.clone(), dex_file.clone());
 
                     find_references_to_class(&class, dex_file, multi_dex, &new_place)
                 }
                 Context::DexType(typ, name, dex_file) => {
-                    let (multi_dex, dex_file) = multi_dex
-                        .get_multi_dex_from_dex_identifier(&dex_file.identifier)
-                        .unwrap();
+                    let (multi_dex, dex_file) = if let Some((md, f)) =
+                        multi_dex.get_multi_dex_from_dex_identifier(&dex_file.identifier)
+                    {
+                        (md, f)
+                    } else {
+                        return vec![];
+                    };
                     new_place = Context::DexType(*typ, name.to_string(), dex_file.clone());
 
                     find_references_to_type(*typ, dex_file, multi_dex, &new_place)
                 }
                 Context::DexMethod(method, dex_file) => {
-                    let (multi_dex, dex_file) = multi_dex
-                        .get_multi_dex_from_dex_identifier(&dex_file.identifier)
-                        .unwrap();
+                    let (multi_dex, dex_file) = if let Some((md, f)) =
+                        multi_dex.get_multi_dex_from_dex_identifier(&dex_file.identifier)
+                    {
+                        (md, f)
+                    } else {
+                        return vec![];
+                    };
                     new_place = Context::DexMethod(method.clone(), dex_file.clone());
 
                     find_references_to_method(&method, dex_file, multi_dex, &new_place)
                 }
                 Context::DexField(field, dex_file) => {
-                    let (multi_dex, dex_file) = multi_dex
-                        .get_multi_dex_from_dex_identifier(&dex_file.identifier)
-                        .unwrap();
+                    let (multi_dex, dex_file) = if let Some((md, f)) =
+                        multi_dex.get_multi_dex_from_dex_identifier(&dex_file.identifier)
+                    {
+                        (md, f)
+                    } else {
+                        return vec![];
+                    };
                     new_place = Context::DexField(field.clone(), dex_file.clone());
 
                     find_references_to_field(&field, dex_file, multi_dex, &new_place)
                 }
                 Context::DexString(str_idx, dex_file) => {
-                    let (multi_dex, dex_file) = multi_dex
-                        .get_multi_dex_from_dex_identifier(&dex_file.identifier)
-                        .unwrap();
+                    let (multi_dex, dex_file) = if let Some((md, f)) =
+                        multi_dex.get_multi_dex_from_dex_identifier(&dex_file.identifier)
+                    {
+                        (md, f)
+                    } else {
+                        return vec![];
+                    };
                     new_place = Context::DexString(*str_idx, dex_file.clone());
                     find_references_to_string(*str_idx, dex_file, multi_dex, &new_place)
                 }
@@ -519,18 +539,22 @@ fn find_references_to_method<'a: 'b, 'b>(
 ) -> Vec<Evidence> {
     let mut context_matches: Vec<Evidence> = vec![];
     let vec_loc = Arc::new(Mutex::new(&mut context_matches));
-    let parent_method = dex_file
+    let parent_method = if let Some(m) = dex_file
         .methods
         .get(looking_for_method_idx.method_idx as usize)
-        .unwrap();
+    {
+        m
+    } else {
+        return vec![];
+    };
     let parent_class = dex_file
         .get_string(
             *dex_file
                 .types
                 .get(parent_method.class_idx as usize)
-                .unwrap() as usize,
+                .unwrap_or(&0) as usize,
         )
-        .unwrap();
+        .unwrap_or("unknown-class");
 
     let classes = multi_dex.classes();
     iterator!(classes).for_each(|(f, c)| {
@@ -781,7 +805,10 @@ pub fn find_string_matches_for_class_name(reg: &Regex, files: &[MultiDexFile]) -
     matches
 }
 
-pub fn find_string_matches_for_type_name(reg: &Regex, files: &[MultiDexFile]) -> Vec<Evidence> {
+pub fn find_string_matches_for_type_name(
+    reg: &Regex,
+    files: &[MultiDexFile],
+) -> Option<Vec<Evidence>> {
     let mut matches = vec![];
     let vec_lock = Arc::new(Mutex::new(&mut matches));
     iterator!(files).for_each(|dex| {
@@ -793,16 +820,15 @@ pub fn find_string_matches_for_type_name(reg: &Regex, files: &[MultiDexFile]) ->
                     None => false,
                 },
             )
-            .map(|type_idx| {
+            .filter_map(|type_idx| {
                 let type_name = (*type_idx)
                     .0
                     .strings
-                    .get(((*type_idx).1) as usize)
-                    .unwrap()
+                    .get(((*type_idx).1) as usize)?
                     .to_str()
-                    .unwrap();
+                    .ok()?;
 
-                Evidence::String(StringEvidence {
+                Some(Evidence::String(StringEvidence {
                     content: type_name.to_owned(),
                     place: Location::Type((*type_idx).1, (*type_idx).0.clone()),
                     context: Context::DexType(
@@ -811,17 +837,20 @@ pub fn find_string_matches_for_type_name(reg: &Regex, files: &[MultiDexFile]) ->
                         (*type_idx).0.clone(),
                     ),
                     confidence_level: ConfidenceLevel::Medium,
-                })
+                }))
             })
             .collect();
         if let Ok(mut lock) = vec_lock.lock() {
             lock.extend(type_matches);
         }
     });
-    matches
+    Some(matches)
 }
 
-pub fn find_string_matches_for_field_name(reg: &Regex, files: &[MultiDexFile]) -> Vec<Evidence> {
+pub fn find_string_matches_for_field_name(
+    reg: &Regex,
+    files: &[MultiDexFile],
+) -> Option<Vec<Evidence>> {
     let mut matches = vec![];
     let vec_lock = Arc::new(Mutex::new(&mut matches));
     iterator!(files).for_each(|dex| {
@@ -832,35 +861,38 @@ pub fn find_string_matches_for_field_name(reg: &Regex, files: &[MultiDexFile]) -
                 Some(matched) => reg.is_match(matched),
                 None => false,
             })
-            .map(|(i, (dex, m))| {
-                Evidence::String(StringEvidence {
-                    content: dex.get_string(m.name_idx as usize).unwrap().to_owned(),
+            .filter_map(|(i, (dex, m))| {
+                Some(Evidence::String(StringEvidence {
+                    content: dex.get_string(m.name_idx as usize)?.to_owned(),
                     place: Location::DexField(i as u32, dex.clone()),
                     context: Context::DexField(m.clone(), dex.clone()),
                     confidence_level: ConfidenceLevel::Medium,
-                })
+                }))
             })
             .collect();
         if let Ok(mut lock) = vec_lock.lock() {
             lock.extend(field_matches);
         }
     });
-    matches
+    Some(matches)
 }
 use std::convert::TryInto;
 
-pub fn find_string_matches_for_static_data(reg: &Regex, files: &[MultiDexFile]) -> Vec<Evidence> {
+pub fn find_string_matches_for_static_data(
+    reg: &Regex,
+    files: &[MultiDexFile],
+) -> Option<Vec<Evidence>> {
     let mut matches = vec![];
     let vec_lock = Arc::new(Mutex::new(&mut matches));
     iterator!(files).for_each(|dex| {
         let classes = dex.classes();
         let field_matches: Vec<_> = iterator!(classes)
             .enumerate()
-            .map(|(i, (dex, m))| {
+            .filter_map(|(i, (dex, m))| {
                 let static_data = iterator!(m.static_fields)
                     .enumerate()
                     .filter_map(|(index, s)| {
-                        let index = m.class_data.as_ref().unwrap().static_fields[index].field_idx;
+                        let index = m.class_data.as_ref()?.static_fields[index].field_idx;
                         match s.value_type {
                             coeus_models::models::ValueType::Byte => None,
                             coeus_models::models::ValueType::String => {
@@ -875,7 +907,7 @@ pub fn find_string_matches_for_static_data(reg: &Regex, files: &[MultiDexFile]) 
                                 }
                             }
                             coeus_models::models::ValueType::Array => {
-                                let array = s.inner.as_ref().unwrap();
+                                let array = s.inner.as_ref()?;
                                 let inner_bytes: Vec<u8> = array.try_into().unwrap_or_default();
                                 let string = String::from_utf8_lossy(&inner_bytes);
                                 if reg.is_match(&string) {
@@ -888,7 +920,7 @@ pub fn find_string_matches_for_static_data(reg: &Regex, files: &[MultiDexFile]) 
                         }
                     })
                     .collect::<Vec<_>>();
-                (i, (dex, m, static_data))
+                Some((i, (dex, m, static_data)))
             })
             .flat_map(|(i, (dex, _, static_data))| {
                 iterator!(static_data)
@@ -910,10 +942,10 @@ pub fn find_string_matches_for_static_data(reg: &Regex, files: &[MultiDexFile]) 
             lock.extend(field_matches);
         }
     });
-    matches
+    Some(matches)
 }
 
-pub fn find_string_matches_for_proto(reg: &Regex, files: &[MultiDexFile]) -> Vec<Evidence> {
+pub fn find_string_matches_for_proto(reg: &Regex, files: &[MultiDexFile]) -> Option<Vec<Evidence>> {
     let mut matches = vec![];
     let vec_lock = Arc::new(Mutex::new(&mut matches));
     iterator!(files).for_each(|dex| {
@@ -926,26 +958,26 @@ pub fn find_string_matches_for_proto(reg: &Regex, files: &[MultiDexFile]) -> Vec
                     _ => false,
                 },
             )
-            .map(|(i, s)| {
-                Evidence::String(StringEvidence {
-                    content: s.0.get_string(s.1.shorty_idx as usize).unwrap().to_string(),
+            .filter_map(|(i, s)| {
+                Some(Evidence::String(StringEvidence {
+                    content: s.0.get_string(s.1.shorty_idx as usize)?.to_string(),
                     place: Location::DexMethod(i as u32, s.0.clone()),
                     context: Context::DexProto(s.1.clone(), s.0.clone()),
                     confidence_level: ConfidenceLevel::Medium,
-                })
+                }))
             })
             .collect();
         if let Ok(mut lock) = vec_lock.lock() {
             lock.extend(proto_matches);
         }
     });
-    matches
+    Some(matches)
 }
 
 pub fn find_string_matches_for_string_entries(
     reg: &Regex,
     files: &[MultiDexFile],
-) -> Vec<Evidence> {
+) -> Option<Vec<Evidence>> {
     let mut matches = vec![];
     let vec_lock = Arc::new(Mutex::new(&mut matches));
     iterator!(files).for_each(|dex| {
@@ -956,20 +988,20 @@ pub fn find_string_matches_for_string_entries(
                 Ok(r) => reg.is_match(r),
                 _ => false,
             })
-            .map(|(i, s)| {
-                Evidence::String(StringEvidence {
-                    content: s.1.to_str().unwrap().to_string(),
+            .filter_map(|(i, s)| {
+                Some(Evidence::String(StringEvidence {
+                    content: s.1.to_str().ok()?.to_string(),
                     place: Location::DexString(i as u32, s.0.clone()),
                     context: Context::DexString(i as u32, s.0.clone()),
                     confidence_level: ConfidenceLevel::VeryLow,
-                })
+                }))
             })
             .collect();
         if let Ok(mut lock) = vec_lock.lock() {
             lock.extend(string_matches);
         }
     });
-    matches
+    Some(matches)
 }
 
 pub fn find_string_matches_in_dex(reg: &Regex, files: &[MultiDexFile]) -> Vec<Evidence> {
@@ -988,11 +1020,21 @@ pub fn find_string_matches_in_dex_with_type(
         let matches = match *search_op {
             ObjectType::Method => find_string_matches_for_method_name(reg, files),
             ObjectType::Class => find_string_matches_for_class_name(reg, files),
-            ObjectType::Type => find_string_matches_for_type_name(reg, files),
-            ObjectType::String => find_string_matches_for_string_entries(reg, files),
-            ObjectType::Field => find_string_matches_for_field_name(reg, files),
-            ObjectType::Proto => find_string_matches_for_proto(reg, files),
-            ObjectType::StaticData => find_string_matches_for_static_data(reg, files),
+            ObjectType::Type => {
+                find_string_matches_for_type_name(reg, files).unwrap_or_else(|| vec![])
+            }
+            ObjectType::String => {
+                find_string_matches_for_string_entries(reg, files).unwrap_or_else(|| vec![])
+            }
+            ObjectType::Field => {
+                find_string_matches_for_field_name(reg, files).unwrap_or_else(|| vec![])
+            }
+            ObjectType::Proto => {
+                find_string_matches_for_proto(reg, files).unwrap_or_else(|| vec![])
+            }
+            ObjectType::StaticData => {
+                find_string_matches_for_static_data(reg, files).unwrap_or_else(|| vec![])
+            }
         };
         if let Ok(mut lock) = vec_lock.lock() {
             lock.extend(matches);
@@ -1080,9 +1122,8 @@ pub fn get_class_for_owned_evidence(evidence: &Evidence) -> Option<(Arc<Class>, 
                         .enumerate()
                         .filter_map(|(_index, ty)| if ty == t { Some(*ty) } else { None })
                         .collect::<Vec<_>>()
-                        .first()
-                        .unwrap() as u32,
-                    f.get_string(*t as usize).unwrap().to_string(),
+                        .first()? as u32,
+                    f.get_string(*t as usize)?.to_string(),
                 )),
                 f.to_owned(),
             )),
@@ -1114,9 +1155,8 @@ pub fn get_class_for_owned_evidence(evidence: &Evidence) -> Option<(Arc<Class>, 
                         .enumerate()
                         .filter_map(|(index, ty)| if ty == t { Some(index) } else { None })
                         .collect::<Vec<_>>()
-                        .first()
-                        .unwrap() as u32,
-                    f.get_string(*t as usize).unwrap().to_string(),
+                        .first()? as u32,
+                    f.get_string(*t as usize)?.to_string(),
                 )),
                 f.to_owned(),
             )),
@@ -1150,9 +1190,8 @@ pub fn get_class_for_owned_evidence(evidence: &Evidence) -> Option<(Arc<Class>, 
                         .enumerate()
                         .filter_map(|(index, ty)| if ty == t { Some(index) } else { None })
                         .collect::<Vec<_>>()
-                        .first()
-                        .unwrap() as u32,
-                    f.get_string(*t as usize).unwrap().to_string(),
+                        .first()? as u32,
+                    f.get_string(*t as usize)?.to_string(),
                 )),
                 f.to_owned(),
             )),

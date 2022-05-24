@@ -1066,11 +1066,14 @@ impl VM {
                         state.return_reg = self.current_state.return_reg.clone();
                         self.current_state = state;
 
-                        current_instruction = self
+                        current_instruction = if let Some(i) = self
                             .current_state
                             .current_instructions
-                            .get(&self.current_state.pc)
-                            .unwrap();
+                            .get(&self.current_state.pc) {
+                                i
+                            } else {
+                                return Err(VMException::NoInstructionAtAddress(self.current_state.current_method_index, self.current_state.pc.0 as usize));
+                            };
                         code_item = self.current_state.current_instructions.clone();
                        dex_file = self.current_state.current_dex_file.clone();
                     } else {
@@ -1139,13 +1142,12 @@ impl VM {
                     if let Some(heap_address) = self.malloc() {
                         self.heap
                             .insert(heap_address, Value::Object(ClassInstance::new(class)));
-                        let new_register = Register::Reference(
-                            dex_file
-                                .get_type_name((*type_idx) as usize)
-                                .unwrap()
-                                .to_owned(),
-                            heap_address,
-                        );
+                         let new_register = if let Some(type_name) =  dex_file
+                                .get_type_name((*type_idx) as usize) {
+                                    Register::Reference(type_name.to_owned(), heap_address)
+                                } else {
+                                    return Err(VMException::OutOfMemory);
+                                };
                         let dst = self
                             .current_state
                             .current_stackframe
@@ -1474,8 +1476,8 @@ impl VM {
                         self.current_state.current_stackframe = registers;
 
                         log::debug!(
-                            "Running: {}",
-                            self.get_method(&dex_file, method_idx).unwrap().1.name
+                            "Running: {:?}",
+                            self.get_method(&dex_file, method_idx).and_then(|a| Ok(a.1.name.clone()))
                         );
                         //push new instructions
                         self.current_state.current_instructions = the_code_hash;
@@ -1580,14 +1582,20 @@ impl VM {
                                     self.current_state.num_params = 0;
                                     self.current_state.vm_state =
                                         ExecutionState::StaticInitializer;
-                                    self.current_state.num_registers =
-                                        static_init.code.as_ref().unwrap().register_size as usize;
+                                    self.current_state.num_registers =if let Some(c) = static_init.code.as_ref() {
+                                        c.register_size as usize
+                                    } else {
+                                        return Err(VMException::LinkerError);
+                                    };
+                                 
                                     let mut registers =
                                         Vec::with_capacity(self.current_state.num_registers);
                                     for _ in 0..self.current_state.num_registers {
                                         registers.push(Register::Empty);
                                     }
                                     self.current_state.current_stackframe = registers;
+                                    //TODO: refactor to use shared codeitem
+                                    // but here we know thart code item must exist, as we would early return else
                                     let the_code_hash = 
                                         static_init
                                             .code
@@ -1692,7 +1700,11 @@ impl VM {
                     if let Some(&Register::Reference(_, address)) =
                         self.current_state.current_stackframe.get(src as usize)
                     {
-                        let _class_resource = self.heap.get(&address).unwrap();
+                        let _class_resource = if let Some(cr) = self.heap.get(&address) {
+                            cr
+                        } else {
+                            return Err(VMException::InvalidMemoryAddress(address));
+                        };
                         if !self.skip_next_breakpoint {
                             if iterator!(self.break_points).any(|bp| matches!(bp, Breakpoint::FieldSet(idx) if *idx == field_idx)){
                                 match _class_resource {

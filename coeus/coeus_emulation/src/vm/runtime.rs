@@ -1016,7 +1016,7 @@ runtime_impl! {
                 if let (Some(Value::Object(md)), Some(Value::Array(bytes))) =
                     (vm.heap.get(instance), vm.heap.get(byte_array))
                 {
-                    if let InternalObject::String(algo) = md.internal_state.get("digest_algo").unwrap()
+                    if let InternalObject::String(algo) = md.internal_state.get("digest_algo").expect("Digest was not created by Runtime Implementation")
                     {
                         match algo.as_str() {
                             "SHA-256" => {
@@ -1484,9 +1484,13 @@ pub fn invoke_runtime(
         .get(method_idx as usize)
         .ok_or_else(|| VMException::MethodNotFound(method_idx.to_string()))?;
     let method_name = method.method_name.as_str();
+    let type_str = *dex_file
+        .types
+        .get(method.class_idx as usize)
+        .ok_or_else(|| VMException::StaticDataNotFound(method.class_idx as u32))?;
     let class_name = dex_file
-        .get_string(dex_file.types[method.class_idx as usize] as usize)
-        .unwrap();
+        .get_string(type_str as usize)
+        .ok_or_else(|| VMException::StaticDataNotFound(type_str))?;
     log::debug!("Invoke: {} {}", class_name, method_name);
     match class_name {
         x if x == StringBuilder::class_name() => {
