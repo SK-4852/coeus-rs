@@ -1,3 +1,9 @@
+// Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
+// 
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use coeus_emulation::vm::{runtime::StringClass, Register, VMException, Value, VM};
 use coeus_macros::iterator;
 use coeus_models::models::MethodData;
@@ -7,10 +13,7 @@ use std::collections::HashMap;
 
 use crate::dex::graph::{ChangeSet, InfoNode};
 
-// Copyright (c) 2022 Patrick Amrein <amrein@ubique.ch>
-//
-// This software is released under the MIT License.
-// https://opensource.org/licenses/MIT
+
 
 pub fn get_dynamic_strings(
     graph: &Graph<InfoNode, i32>,

@@ -1,8 +1,11 @@
-//! This module provides functions to  register: (), is_argument: (), data: (), transformations: () register: (), is_argument: (), data: (), transformations: () register: (), is_argument: (), data: (), transformations: ()setup and work with graphs. Take a look a the `InfoNode` enum to get a feeling of what is contained in the graph. The `InfoNode` represents a Node-(Weight). The module also uses dex emulation to discover certain dynamic nodes, not directly present in the static dex file.
-// Copyright (c) 2022 Patrick Amrein <amrein@ubique.ch>
+// Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
 // 
-// This software is released under the MIT License.
-// https://opensource.org/licenses/MIT
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+//! This module provides functions to  register: (), is_argument: (), data: (), transformations: () register: (), is_argument: (), data: (), transformations: () register: (), is_argument: (), data: (), transformations: ()setup and work with graphs. Take a look a the `InfoNode` enum to get a feeling of what is contained in the graph. The `InfoNode` represents a Node-(Weight). The module also uses dex emulation to discover certain dynamic nodes, not directly present in the static dex file.
+
 
 pub mod information_graph;
 pub mod callgraph;

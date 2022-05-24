@@ -1,3 +1,9 @@
+// Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
+// 
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use coeus_emulation::vm::{
     runtime::{JavaArray, JavaObject, ObjectClass, StringClass},
     Breakpoint, ClassInstance, Register, Value, VM,
@@ -31,10 +37,7 @@ use super::{
     ChangeSet, InfoNode, Supergraph,
 };
 
-// Copyright (c) 2022 Patrick Amrein <amrein@ubique.ch>
-//
-// This software is released under the MIT License.
-// https://opensource.org/licenses/MIT
+
 
 /// Build the super graph containing nodes from various pools and
 /// connect them in a directional graph.

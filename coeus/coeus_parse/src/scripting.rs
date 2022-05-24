@@ -1,3 +1,9 @@
+// Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
+// 
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 //! This module exposes functions to rhai, such as loadind and parsing a zip/dex file. It also provides a loading function for the wasm target, where the file can be provided as a base64 encoded string.
 use rhai::{module_resolvers::StaticModuleResolver, plugin::*};
 

@@ -1,3 +1,9 @@
+// Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
+// 
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 //! This module handles zip extraction and gathers all files into a `Files` struct, separating dex files and binary files. The dex files are parsed and inserted into `MultiDexFile` corresponding to all dex files at the same level. For binary files, we use `goblin` to allow parsing of potentially binary files. The binary parsing is a lazy operation though.
 use abxml::{
     visitor::{Executor, ModelVisitor, XmlVisitor},

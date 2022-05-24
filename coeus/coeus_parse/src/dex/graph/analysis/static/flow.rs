@@ -1,3 +1,9 @@
+// Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
+// 
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::{collections::HashMap, sync::Arc};
 
 use coeus_emulation::vm::{VM, runtime::StringClass};
@@ -8,10 +14,7 @@ use crate::dex::graph::{ChangeSet, InfoNode};
 
 use super::models::{StaticRegister, FunctionTransformation, StaticRegisterData};
 
-// Copyright (c) 2022 Patrick Amrein <amrein@ubique.ch>
-//
-// This software is released under the MIT License.
-// https://opensource.org/licenses/MIT
+
 
 /**
    After a branching instruction, a new branch is inserted. Each branch keeps track of the static registers encountered during that flow
