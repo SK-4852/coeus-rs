@@ -100,7 +100,7 @@ class Method:
         """Return a best effort disassembly of this method."""
     def get_class(self) -> Class:
         """Get the class this method is defined on."""
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
+    def __call__(self, *args: Any, **kwds: Any) -> VmResult:
         """Prepare a virtual machine and run the function, returning the result the function returned."""
     def cross_references(self, ao: AnalyzeObject) -> list[Evidence]:
         """Find all methods, referencing this method."""
