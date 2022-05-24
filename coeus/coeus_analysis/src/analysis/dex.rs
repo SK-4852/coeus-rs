@@ -12,8 +12,8 @@ use coeus_macros::iterator;
 use coeus_models::models::{AccessFlags, Class, DexFile, Field, Files, Method, MultiDexFile};
 
 use super::{
-    ConfidenceLevel, Context, CrossReferenceEvidence, Evidence, Location, ObjectType,
-    StringEvidence,
+    ConfidenceLevel, Context, CrossReferenceEvidence, Evidence, InstructionEvidence, Location,
+    ObjectType, StringEvidence,
 };
 
 pub fn get_native_methods(md: &MultiDexFile, _files: &Files) -> Vec<(Arc<DexFile>, Arc<Method>)> {
@@ -376,7 +376,7 @@ fn find_references_to_field<'a: 'b, 'b>(
 ) -> Vec<Evidence> {
     let mut context_matches: Vec<Evidence> = vec![];
     let vec_loc = Arc::new(Mutex::new(&mut context_matches));
-    let field_index = *iterator!(dex_file.fields)
+    let field_index = if let Some(f_i) = iterator!(dex_file.fields)
         .enumerate()
         .filter_map(|(idx, f)| {
             if f.as_ref() == field_idx {
@@ -387,10 +387,15 @@ fn find_references_to_field<'a: 'b, 'b>(
         })
         .collect::<Vec<_>>()
         .first()
-        .unwrap() as u16;
+    {
+        *f_i as u16
+    } else {
+        return vec![];
+    };
+
     iterator!(dex_file.classes).for_each(|c| {
         let methods_containing_references: Vec<_> = iterator!(c.codes)
-            .filter(|md| match md.code.as_ref() {
+            .filter_map(|md| match md.code.as_ref() {
                 Some(code) => {
                     let references =
                             iterator!(code.insns).filter(|(_, _, instruction)| match instruction {
@@ -479,16 +484,25 @@ fn find_references_to_field<'a: 'b, 'b>(
 
                                 _ => false,
                             });
-                    references.count() > 0
+                    Some((md, references.collect::<Vec<_>>()))
                 }
-                None => false,
+                None => None,
             })
-            .map(|m| {
-                Evidence::CrossReference(CrossReferenceEvidence {
-                    place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
-                    place_context: Context::DexMethod(m.method.clone(), dex_file.clone()),
-                    context: place.clone(),
-                })
+            .flat_map(|(m, instructions)| {
+                instructions
+                    .iter()
+                    .map(|(_, _, instruction)| {
+                        Evidence::Instructions(InstructionEvidence {
+                            instructions: vec![format!("{:?}", instruction)],
+                            place: Location::DexMethod(
+                                m.method.method_idx as u32,
+                                dex_file.clone(),
+                            ),
+                            context: place.clone(),
+                            confidence_level: ConfidenceLevel::Medium,
+                        })
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect();
         if let Ok(mut lock) = vec_loc.lock() {

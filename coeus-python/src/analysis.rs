@@ -252,12 +252,64 @@ pub struct DexString {
 }
 
 #[pyclass]
+#[derive(Clone)]
+/// Helper class for field access evidences
+pub struct FieldAccess {
+    field: DexField,
+    place: analysis::Location,
+    instruction: String,
+}
+
+#[pymethods]
+impl FieldAccess {
+    pub fn get_instruction(&self) -> &str {
+        self.instruction.as_str()
+    }
+    pub fn get_field(&self) -> DexField {
+        self.field.clone()
+    }
+    pub fn get_class(&self) -> PyResult<Class> {
+        if let (Some(class), Some(file)) = (self.place.get_class(), self.place.get_dex_file()) {
+            Ok(Class { class, file })
+        } else {
+            Err(PyRuntimeError::new_err("Could not get class"))
+        }
+    }
+    pub fn get_function(&self) -> PyResult<Method> {
+        if let analysis::Location::DexMethod(method_idx, f) = &self.place {
+            let class = self.get_class()?;
+            let method_data = f.get_method_by_idx(*method_idx).cloned();
+            let method = if let Some(method) = f
+                .methods
+                .iter()
+                .find(|m| m.method_idx == (*method_idx as u16))
+            {
+                method.clone()
+            } else {
+                return Err(PyRuntimeError::new_err("Could not find method"));
+            };
+            Ok(Method {
+                method,
+                method_data,
+                file: f.clone(),
+                class: class.class,
+            })
+        } else {
+            Err(PyRuntimeError::new_err(
+                "Something is wrong with this method",
+            ))
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
 /// This represents a field.
 pub struct DexField {
-    pub(crate) _field: Arc<models::Field>,
+    pub(crate) field: Arc<models::Field>,
     pub(crate) access_flags: Option<AccessFlags>,
     pub(crate) field_name: Option<String>,
-    pub(crate) _file: Arc<DexFile>,
+    pub(crate) file: Arc<DexFile>,
     pub(crate) dex_class: Class,
 }
 
@@ -466,9 +518,9 @@ impl Evidence {
             }
 
             Ok(DexField {
-                _field: field.clone(),
+                field: field.clone(),
                 access_flags,
-                _file: file.clone(),
+                file: file.clone(),
                 field_name: if let analysis::Evidence::String(s) = &self.evidence {
                     Some(s.content.clone())
                 } else {
@@ -532,6 +584,27 @@ impl DexField {
     #[getter(dex_class)]
     pub fn get_class(&self) -> Class {
         self.dex_class.clone()
+    }
+    pub fn get_field_access(&self, ao: &AnalyzeObject) -> Vec<FieldAccess> {
+        let field_context = analysis::Context::DexField(self.field.clone(), self.file.clone());
+        find_cross_reference_array(&[field_context], &ao.files)
+            .iter()
+            .filter_map(|evidence| {
+                if let analysis::Evidence::Instructions(instructions) = evidence {
+                    Some(FieldAccess {
+                        field: self.clone(),
+                        place: instructions.place.clone(),
+                        instruction: instructions
+                            .instructions
+                            .get(0)
+                            .cloned()
+                            .unwrap_or_default(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -736,14 +809,13 @@ impl Method {
             let proto_idx = method_data.method.proto_idx;
             let proto = self.file.protos[proto_idx as usize].clone();
             let mut vm_arguments: Vec<Register> = vec![];
-            let runtime = if let Some(vm_runtime) = kwargs.map(|a| a.get_item("runtime")).flatten()
-            {
+            let runtime = if let Some(vm_runtime) = kwargs.and_then(|a| a.get_item("runtime")) {
                 let runtime: Runtime = vm_runtime.extract()?;
                 runtime.runtime
             } else {
                 vec![]
             };
-            let py_vm = if let Some(vm) = kwargs.map(|a| a.get_item("vm")).flatten() {
+            let py_vm = if let Some(vm) = kwargs.and_then(|a| a.get_item("vm")) {
                 vm.extract()?
             } else {
                 let vm = VM::new(self.file.clone(), runtime, Arc::new(HashMap::new()));
@@ -865,7 +937,7 @@ impl Method {
 
 pub(crate) fn friendly_name(name: &str) -> String {
     let without_prefix = name.strip_prefix('L').unwrap_or_default();
-    let with_dots = without_prefix.replace("/", ".");
+    let with_dots = without_prefix.replace('/', ".");
     with_dots.strip_suffix(';').unwrap_or_default().to_string()
 }
 
@@ -891,7 +963,7 @@ impl Class {
     }
     pub fn friendly_name(&self) -> String {
         let without_prefix = self.name().strip_prefix('L').unwrap_or_default();
-        let with_dots = without_prefix.replace("/", ".");
+        let with_dots = without_prefix.replace('/', ".");
         with_dots
             .strip_suffix(';')
             .unwrap_or_default()
@@ -989,5 +1061,6 @@ pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Instruction>()?;
     m.add_class::<Branching>()?;
     m.add_class::<NativeSymbol>()?;
+    m.add_class::<FieldAccess>()?;
     Ok(())
 }

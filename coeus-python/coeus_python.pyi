@@ -44,6 +44,16 @@ class NativeSymbol:
     def get_function_bytes(self) -> bytes:
         """Return the bytes to the symbol. Currently only works for (exported) functions. Use e.g. capstone to disassemble the bytes."""
 
+class FieldAccess:
+    """A helper class for field access"""
+    def get_instruction(self) -> str:
+        """Get the opcode of the instruction"""
+    def get_field(self) -> DexField:
+        """Get a backreference to the DexField"""
+    def get_class(self) -> Class:
+        """Get the class where the field access came from"""
+    def get_function(self) -> Method:
+        """Get the method where the field access was found"""
 class DexField:
     def try_get_value(self, dex_vm: DexVm) -> VmResult:
         """Try evaluating the static dex context to find values set for this field. This only accurately works for static final fields, as they (should) are not accessed anymore."""
@@ -53,6 +63,8 @@ class DexField:
         """Get the full qualified domain name, uniquely identifying this field."""
     def get_class(self) -> Class:
         """Return the class this field was defined on."""
+    def get_field_access(self, ao: AnalyzeObject) -> list[FieldAccess]:
+        """Get a list instructions accessing this field"""
     dex_class : Class
     """The class this field is defined on."""
 class Evidence:
