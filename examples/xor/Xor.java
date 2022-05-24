@@ -10,9 +10,9 @@ public class Xor {
         byte[] keyBytes = key.getBytes();
         byte[] encryptedBytes = new byte[plaintextBytes.length];
 
-        for(var i =0; i< plaintextBytes.length; i++ ) {
-            encryptedBytes[i] = (byte)(plaintextBytes[i] ^ keyBytes[i % keyBytes.length]);
+        for (int i = 0; i < plaintextBytes.length; i++) {
+            encryptedBytes[i] = (byte) (plaintextBytes[i] ^ keyBytes[i % keyBytes.length]);
         }
         return encryptedBytes;
-    } 
- }
+    }
+}

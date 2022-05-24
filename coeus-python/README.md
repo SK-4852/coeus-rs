@@ -1,25 +1,40 @@
 # Coeus-Python
 
-Coeus-Python is the python interface to interact with the `coeus` library. It uses `pyo3` to expose `coeus` API to python.
+Coeus-Python is the Python interface to interact with the `coeus` library.
+It uses `pyo3` to expose the `coeus` API.
+
+This is useful for quick prototyping and performing analysis with coeus from Python.
 
 ## Build
 
-To build the native module (aka wheel) we need [maturin](https://github.com/PyO3/maturin). With `maturin` installed it is as simple as `maturin build --release`. This should build the rust crate and the python API yielding a wheel in the `target/wheels` directory. The wheel can then be installed with pip with something similar to `python -m pip install --force-reinstall <path-to-wheel>.whl`.
+1. Install [maturin](https://github.com/PyO3/maturin).
+2. Build the Rust crate and the Python API into a wheel: `maturin build --release`.
+3. Install the wheel: `python3 -m pip install --force-reinstall target/wheels/<wheel-name>.whl`.
 
 ## Type Hints
-Coeus-Python includes type hints, which should provide enough information for IDEs to provide type checking and auto completion. If the API is adjusted, the `coeus_python.pyi` file should be updated to reflect the changes in the API.
 
-## Entry Point
+Coeus-Python includes type hints, which should provide enough information for IDEs to provide type checking and auto completion.
+These hints are packaged into the wheel.
 
-To start an analysis with coeus-python, one always starts of with the `AnalyzeObject`. This object provides functions to load and parse an APK, as well as search throught the APK.
+When you edit the Python API please also update the `coeus_python.pyi` accordingly.
+
+## Using Coeus-Python
+
+The entrypoint for working with Coeus-Python is the `AnalyzeObject`.
+This object provides functions to load and parse an APK, as well as search throught the APK.
+
+See the [examples](../examples) directory for a code example.
 
 ## Native Support
 
-Currently, most of the analysis is done on the dex part of the APK (aka. Java). There is the possibility to search for imported/exported functions in native libraries. Further, there is experimental support to search for strings in the `.rodata` section of the ELF binary. 
+Currently, most of the analysis is done on the dex part of the APK (aka. Java).
+There is the possibility to search for imported/exported functions in native libraries.
+There is also experimental support to search for strings in the `.rodata` section of the ELF binary.
 
 ## Emulation
 
-In order to get and analyse certain static (heap allocated) fields the static constructor of a class needs to be run. This is demonstrated in the following code sample:
+In order to get and analyse certain static (heap allocated) fields the static constructor of a class needs to be run.
+This is demonstrated in the following code sample:
 
 ```python
 from coeus_python import AnalyzeObject, DexVm;
