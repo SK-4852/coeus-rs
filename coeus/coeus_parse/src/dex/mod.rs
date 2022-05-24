@@ -109,7 +109,10 @@ pub fn parse_dex_buf(
                     .expect("wrong access flags"),
                 super_class: class.superclass_idx,
                 class_name: get_string_from_idx(types[class.class_idx as usize] as u16, &strings)
-                    .unwrap(),
+                    .unwrap_or_else(|| {
+                        log::error!("Could not resolve class name");
+                        "-UNKONWN-".to_string()
+                    }),
                 class_data: None,
                 codes: vec![],
                 static_fields: vec![],
@@ -163,7 +166,10 @@ pub fn parse_dex_buf(
                 .expect("accessflags wrong"),
             super_class: class.superclass_idx,
             class_name: get_string_from_idx(types[class.class_idx as usize] as u16, &strings)
-                .unwrap(),
+                .unwrap_or_else(|| {
+                    log::error!("Could not resolve class name");
+                    "-UNKONWN-".to_string()
+                }),
             class_data,
             codes: vec![],
             static_fields,

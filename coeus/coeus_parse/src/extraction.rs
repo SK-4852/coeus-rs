@@ -7,7 +7,7 @@ use abxml::{
 use std::{
     collections::HashMap,
     fs::File,
-    io::{Cursor, Read, Seek, ErrorKind},
+    io::{Cursor, ErrorKind, Read, Seek},
     sync::Arc,
 };
 use zip::ZipArchive;
@@ -79,7 +79,10 @@ pub fn extract_single_threaded(
         let _ = Executor::xml(Cursor::new(&bin_manifest), &mut visitor);
         let (manifest_content, android_manifest) = {
             let content = visitor.into_string().unwrap_or_else(|_| "".to_string());
-            (content.clone(), serde_xml_rs::from_str(&content).unwrap_or_default())
+            (
+                content.clone(),
+                serde_xml_rs::from_str(&content).unwrap_or_default(),
+            )
         };
 
         let secondary = dex_files.split_off(1);
@@ -105,14 +108,21 @@ pub fn extract_zip(
     depth: u32,
     max_depth: u32,
 ) -> Files {
-    let mut archive = ZipArchive::new(f.get_cursor()).expect("Expected a zip file");
-
     let mut dex_files = vec![];
     let mut other_files = HashMap::new();
     let mut multi_dex = vec![];
     let mut dex_jobs = vec![];
     let mut bin_manifest = vec![];
     let mut bin_res_file = vec![];
+
+    let mut archive = if let Ok(archive) = ZipArchive::new(f.get_cursor()) {
+        archive
+    } else {
+        return Files {
+            multi_dex,
+            binaries: other_files,
+        };
+    };
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).expect("Error Accessing file");
@@ -171,12 +181,15 @@ pub fn extract_zip(
         let _ = Executor::xml(Cursor::new(&bin_manifest), &mut visitor);
         let (manifest_content, android_manifest) = {
             let content = visitor.into_string().unwrap_or_else(|_| "".to_string());
-            (content.clone(), serde_xml_rs::from_str(&content)
-                .or_else::<AndroidManifest, _>(|err| {
-                    log::warn!("{:?}", err);
-                    Ok(AndroidManifest::default())
-                })
-                .unwrap())
+            (
+                content.clone(),
+                serde_xml_rs::from_str(&content)
+                    .or_else::<AndroidManifest, _>(|err| {
+                        log::warn!("{:?}", err);
+                        Ok(AndroidManifest::default())
+                    })
+                    .unwrap(),
+            )
         };
 
         let secondary = dex_files.split_off(1);
@@ -213,7 +226,12 @@ pub fn load_file(path: &str, build_graph: bool, max_depth: i64) -> Result<Files,
         f.seek(std::io::SeekFrom::Start(0))?;
         let coeus_file = parse_dex(path, f, build_graph)
             .ok_or_else(|| std::io::Error::new(ErrorKind::Other, "Could not parse dex"))?;
-        let multi_dex = MultiDexFile::new(AndroidManifest::default(), String::new(), coeus_file, vec![]);
+        let multi_dex = MultiDexFile::new(
+            AndroidManifest::default(),
+            String::new(),
+            coeus_file,
+            vec![],
+        );
         Files::new(vec![multi_dex], HashMap::new())
     } else {
         log::debug!("nothing");
