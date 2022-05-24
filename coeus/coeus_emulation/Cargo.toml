@@ -1,0 +1,28 @@
+[package]
+name = "coeus_emulation"
+version = "0.1.1"
+authors = ["Patrick Amrein <amrein@ubique.ch>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+coeus_models = {path = "../coeus_models"}
+coeus_macros = {path = "../coeus_macros"}
+
+petgraph = "0.6.0"
+lazy_static = "1.4"
+rand = {version = "0.8.3", features = ["getrandom"]}
+rayon = "1.5"
+base64 = "0.13"
+sha-1 = "0.9"
+sha2 = "0.9"
+md-5 = "0.9"
+log = "0.4.14"
+rhai = {version = "1.1.0", optional = true}
+instant = {version = "0.1", features = ["now"]}
+getrandom = "0.2"
+
+[features]
+rhai-script = ["rhai"]
+wasm = ["rhai/wasm-bindgen", "instant/stdweb", "getrandom/js", "getrandom/wasm-bindgen"]

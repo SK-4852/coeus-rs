@@ -1,0 +1,247 @@
+// Copyright (c) 2022 Patrick Amrein <amrein@ubique.ch>
+//
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
+use std::sync::Arc;
+
+use coeus::coeus_analysis::analysis::dex::get_native_methods;
+use coeus::coeus_analysis::analysis::{
+    find_any, find_classes, find_fields, find_methods, find_string_matches, ALL_TYPES,
+};
+use coeus::coeus_models::models::{AndroidManifest, DexFile, Files};
+use pyo3::exceptions::{PyIOError, PyRuntimeError};
+use pyo3::prelude::*;
+use regex::Regex;
+
+use crate::analysis::Method;
+
+#[pyclass]
+/// Abstract object holding all resources found. Use this as the root object for further analysis.
+#[pyo3(text_signature = "(archive, build_graph, max_depth, /)")]
+pub struct AnalyzeObject {
+    pub(crate) files: Files,
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct Runtime {
+    pub runtime: Vec<Arc<DexFile>>,
+}
+#[pyclass]
+#[derive(Clone)]
+pub struct Manifest {
+    _file: Arc<DexFile>,
+    manifest_content: String,
+    manifest: AndroidManifest,
+}
+
+#[pymethods]
+impl Manifest {
+    pub fn get_json(&self) -> String {
+        serde_json::to_string(&self.manifest).unwrap()
+    }
+    pub fn get_xml(&self) -> String {
+        self.manifest_content.clone()
+    }
+}
+
+#[pymethods]
+impl AnalyzeObject {
+    #[new]
+    pub fn new(archive: &str, build_graph: bool, max_depth: i64) -> PyResult<Self> {
+        match coeus::coeus_parse::extraction::load_file(archive, build_graph, max_depth) {
+            Ok(files) => Ok(AnalyzeObject { files }),
+            Err(e) => Err(PyIOError::new_err(format!("{:?}", e))),
+        }
+    }
+    pub fn get_runtime(&self, file: &Method) -> PyResult<Runtime> {
+        let file_identifier = &file.file.identifier;
+        if let Some(runtime_files) = self.files.multi_dex.iter().find(|a| {
+            &a.primary.identifier == file_identifier
+                || a.secondary
+                    .iter()
+                    .any(|sec| &sec.identifier == file_identifier)
+        }) {
+            Ok(Runtime {
+                runtime: runtime_files.secondary.to_vec(),
+            })
+        } else {
+            Err(PyRuntimeError::new_err("runtime not found"))
+        }
+    }
+
+    pub fn get_manifests(&self) -> Vec<Manifest> {
+        self.files
+            .multi_dex
+            .iter()
+            .map(|a| Manifest {
+                _file: a.primary.clone(),
+                manifest_content: a.manifest_content.clone(),
+                manifest: a.android_manifest.clone(),
+            })
+            .collect()
+    }
+
+    /// Find all functions in the dex file having the modifier `native`
+    pub fn get_native_methods(&self) -> Vec<Method> {
+        let mut methods = vec![];
+        for md in &self.files.multi_dex {
+            let ms = get_native_methods(md, &self.files);
+
+            for (file, method) in ms {
+                let class = if let Some(class) = file.get_class_by_type(method.class_idx) {
+                    class
+                } else {
+                    println!("{} has no class def somethings off", method.class_idx);
+                    continue;
+                };
+                let method_data = class
+                    .codes
+                    .iter()
+                    .find(|a| a.method_idx == method.method_idx as u32)
+                    .cloned();
+                methods.push(Method {
+                    method,
+                    method_data,
+                    file,
+                    class,
+                });
+            }
+        }
+        methods
+    }
+
+    pub fn __getitem__(&self, name: &str) -> Vec<(String, Vec<u8>)> {
+        let mut results = vec![];
+        for key in self.files.binaries.keys() {
+            if key.contains(name) {
+                results.push((key.clone(), self.files.binaries[key].data().to_vec()));
+            }
+        }
+        results
+    }
+
+    pub fn find_native_imports(
+        &self,
+        library: &str,
+        pattern: &str,
+    ) -> Vec<crate::analysis::Evidence> {
+        let pattern = if let Ok(reg) = Regex::new(pattern) {
+            reg
+        } else {
+            return vec![];
+        };
+        let obj = if let Some(obj) = self.files.binaries.get(library) {
+            obj
+        } else {
+            return vec![];
+        };
+        let imports =
+            coeus::coeus_analysis::analysis::native::find_imported_functions(&pattern, obj.clone());
+        imports
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect()
+    }
+    pub fn find_native_exports(
+        &self,
+        library: &str,
+        pattern: &str,
+    ) -> Vec<crate::analysis::Evidence> {
+        let pattern = if let Ok(reg) = Regex::new(pattern) {
+            reg
+        } else {
+            return vec![];
+        };
+        let obj = if let Some(obj) = self.files.binaries.get(library) {
+            obj
+        } else {
+            return vec![];
+        };
+        let exports =
+            coeus::coeus_analysis::analysis::native::find_exported_functions(&pattern, obj.clone());
+        exports
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect()
+    }
+    pub fn find_native_strings(
+        &self,
+        library: &str,
+        pattern: &str,
+    ) -> Vec<crate::analysis::Evidence> {
+        let pattern = if let Ok(reg) = Regex::new(pattern) {
+            reg
+        } else {
+            return vec![];
+        };
+        let obj = if let Some(obj) = self.files.binaries.get(library) {
+            obj
+        } else {
+            return vec![];
+        };
+        let strings = coeus::coeus_analysis::analysis::native::find_strings(&pattern, obj.clone());
+        strings
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect()
+    }
+
+    /// Find methods in the analyzed object by utilising a regular expression
+    #[pyo3(text_signature = "($self, name,/)")]
+    pub fn find_methods(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_methods(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+
+    /// Find methods in the analyzed object by utilising a regular expression
+    #[pyo3(text_signature = "($self, name,/)")]
+    pub fn find_fields(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_fields(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    /// Find methods in the analyzed object by utilising a regular expression
+    #[pyo3(text_signature = "($self, name,/)")]
+    pub fn find_strings(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_string_matches(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    /// Find methods in the analyzed object by utilising a regular expression
+    #[pyo3(text_signature = "($self, name,/)")]
+    pub fn find_classes(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_classes(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    #[pyo3(text_signature = "($self, name,/)")]
+    pub fn find(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_any(&regex, &ALL_TYPES, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+}
+
+pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<AnalyzeObject>()?;
+    m.add_class::<Manifest>()?;
+    Ok(())
+}

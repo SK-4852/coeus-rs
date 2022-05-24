@@ -1,0 +1,30 @@
+[package]
+name = "coeus"
+version = "0.1.1"
+authors = ["Patrick Amrein <amrein@ubique.ch>"]
+edition = "2018"
+build = "build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["emulation", "models", "parse", "analysis", "macros"]
+emulation = ["coeus_emulation"]
+macros = ["coeus_macros"]
+models = ["coeus_models"]
+analysis = ["coeus_analysis"]
+parse = ["coeus_parse"]
+# graphviz = ["coeus_parse/graphviz"]
+wasm = ["coeus_emulation/wasm", "coeus_parse/wasm", "coeus_models/wasm", "coeus_analysis/wasm"]
+
+rhai-script = ["coeus_emulation/rhai-script", "coeus_parse/rhai-script", "coeus_models/rhai-script", "coeus_analysis/rhai-script"]
+
+[dependencies]
+coeus_emulation = {path = "./coeus_emulation", optional = true}
+coeus_analysis= {path = "./coeus_analysis", optional = true}
+coeus_macros = {path = "./coeus_macros", optional = true}
+coeus_models = {path = "./coeus_models", optional = true}
+coeus_parse = {path = "./coeus_parse", optional = true}
+
+[build-dependencies]
+built = "0.5.1"
