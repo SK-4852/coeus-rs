@@ -1,10 +1,8 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-
 
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
@@ -203,6 +201,53 @@ impl Instruction {
             };
         }
         Err(PyRuntimeError::new_err("Could not execute"))
+    }
+    pub fn get_argument_types(&self) -> Vec<String> {
+        if let LastInstruction::FunctionCall {
+            name: _name,
+            signature: _signature,
+            class_name: _class_name,
+            class: _class,
+            method: _method,
+            args,
+            result: _result,
+        } = &self.instruction
+        {
+            let mut type_names = vec![];
+            for arg in args {
+                match arg {
+                    analysis::instruction_flow::Value::String(_) => {
+                        type_names.push("Ljava/lang/String;".to_string())
+                    }
+                    analysis::instruction_flow::Value::Number(_) => {
+                        type_names.push("I".to_string())
+                    }
+                    analysis::instruction_flow::Value::Boolean(_) => {
+                        type_names.push("Z".to_string())
+                    }
+                    analysis::instruction_flow::Value::Char(_) => type_names.push("C".to_string()),
+                    analysis::instruction_flow::Value::Byte(_) => type_names.push("B".to_string()),
+                    analysis::instruction_flow::Value::Bytes(_) => {
+                        type_names.push("[B".to_string())
+                    }
+                    analysis::instruction_flow::Value::Variable(l) => type_names.push(format!(
+                        "{:?}",
+                        Instruction { instruction: (**l).to_owned() }.get_argument_types()
+                    )),
+                    analysis::instruction_flow::Value::Unknown { ty } => {
+                        type_names.push(ty.to_string())
+                    }
+                    analysis::instruction_flow::Value::Object { ty } => {
+                        type_names.push(ty.to_string())
+                    }
+                    analysis::instruction_flow::Value::Invalid
+                    | analysis::instruction_flow::Value::Empty => {}
+                }
+            }
+            type_names
+        } else {
+            vec![]
+        }
     }
     pub fn get_string_arguments(&self) -> Vec<String> {
         if let LastInstruction::FunctionCall {

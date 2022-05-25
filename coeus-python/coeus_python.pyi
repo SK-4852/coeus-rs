@@ -87,6 +87,8 @@ class Evidence:
 class Instruction:
     def get_string_arguments(self) -> list[str]:
         """Return all arguments to this functions that are constant strings."""
+    def get_argument_types(self) -> list[str]:
+        """Return the type names of all arguments. If the argument was a result of a previous function call, it prints the debug string of the inner arguments."""
     def execute(self, vm: DexVm) -> Any:
         """Try executing the instruction with the VM. This can help evaluate possible `const` functions or simple static string encryptors"""
 class Method:
