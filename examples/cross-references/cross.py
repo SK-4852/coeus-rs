@@ -8,7 +8,7 @@ from coeus_python import AnalyzeObject
 
 # Extract the APK and parse the dex files
 
-# This APK has proguard activated, and causes the BouncyCastle provider to  be obfuscated
+# This APK has proguard activated, and causes the BouncyCastle provider to be obfuscated
 ao = AnalyzeObject("test-proguard.apk", False, -1)
 
 # Here on the other hand we have proguard completely deactivated, and we can find the algorithm providers
@@ -33,7 +33,7 @@ getBouncyCastleProvider = usageInstruction.get_argument_types()[0]
 bcs = ao.find_classes(getBouncyCastleProvider.replace("/", "."))
 foundBcClass = False
 
-# we just wan't to check every occurences, since we might have some classes defined in dex classes, without a actual 
+# we just wan't to check every occurences, since we might have some classes defined in dex classes, without an actual 
 # definition
 for b in bcs:
     # we were looking for classes, so this should be safe
