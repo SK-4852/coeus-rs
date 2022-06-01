@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use lazy_static::lazy_static;
 
-use coeus_models::models::{AccessFlags, Class, DexFile};
+use coeus_models::models::{AccessFlags, Class, DexFile, Method};
 
 use super::{ClassInstance, InternalObject, Register, VMException, Value, VM};
 
@@ -1479,24 +1479,13 @@ impl StringClass {
     }
 }
 
-pub fn invoke_runtime(
+pub fn invoke_runtime_with_method(
     vm: &mut VM,
-    dex_file: Arc<DexFile>,
-    method_idx: u32,
+    class_name: &str,
+    method: Arc<Method>,
     arguments: Vec<Register>,
 ) -> Result<(), VMException> {
-    let method = dex_file
-        .methods
-        .get(method_idx as usize)
-        .ok_or_else(|| VMException::MethodNotFound(method_idx.to_string()))?;
     let method_name = method.method_name.as_str();
-    let type_str = *dex_file
-        .types
-        .get(method.class_idx as usize)
-        .ok_or_else(|| VMException::StaticDataNotFound(method.class_idx as u32))?;
-    let class_name = dex_file
-        .get_string(type_str as usize)
-        .ok_or_else(|| VMException::StaticDataNotFound(type_str))?;
     log::debug!("Invoke: {} {}", class_name, method_name);
     match class_name {
         x if x == StringBuilder::class_name() => {
@@ -1596,4 +1585,24 @@ pub fn invoke_runtime(
         }
     }
     Ok(())
+}
+
+pub fn invoke_runtime(
+    vm: &mut VM,
+    dex_file: Arc<DexFile>,
+    method_idx: u32,
+    arguments: Vec<Register>,
+) -> Result<(), VMException> {
+    let method = dex_file
+        .methods
+        .get(method_idx as usize)
+        .ok_or_else(|| VMException::MethodNotFound(method_idx.to_string()))?;
+    let type_str = *dex_file
+        .types
+        .get(method.class_idx as usize)
+        .ok_or_else(|| VMException::StaticDataNotFound(method.class_idx as u32))?;
+    let class_name = dex_file
+        .get_string(type_str as usize)
+        .ok_or_else(|| VMException::StaticDataNotFound(type_str))?;
+    invoke_runtime_with_method(vm, class_name, method.clone(), arguments)
 }

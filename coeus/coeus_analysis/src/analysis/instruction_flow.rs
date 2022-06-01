@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -93,7 +93,7 @@ impl LastInstruction {
     pub fn execute(&mut self, vm: &mut VM) -> Result<Value, VMException> {
         match self {
             LastInstruction::FunctionCall {
-                name,
+                name: _name,
                 signature: _signature,
                 class_name,
                 class,
@@ -147,19 +147,22 @@ impl LastInstruction {
                     };
                     vm_args.push(arg);
                 }
-                let (file, function) = vm.lookup_method(class_name, &method)?;
-                let function = function.clone();
-                let code = if let Some(code) = &function.code {
-                    code
+                if let Ok((file, function)) = vm.lookup_method(class_name, &method) {
+                    let function = function.clone();
+                    if let Some(code) = &function.code {
+                        vm.start(
+                            method.method_idx as u32,
+                            &file.get_identifier(),
+                            code,
+                            vm_args,
+                        )?;
+                    } else {
+                        vm.invoke_runtime(file.clone(), method.method_idx as u32, vm_args)?;
+                    };
                 } else {
-                    return Err(VMException::MethodNotFound(name.to_string()));
-                };
-                vm.start(
-                    method.method_idx as u32,
-                    &file.get_identifier(),
-                    code,
-                    vm_args,
-                )?;
+                    vm.invoke_runtime_with_method(class_name, method.clone(), vm_args)?;
+                }
+
                 let r = vm
                     .get_return_object()
                     .map(|a| match a {
@@ -265,7 +268,7 @@ impl Value {
             Self::Number(number) => Some(*number),
             Self::Byte(b) => Some(*b as i128),
             Self::Char(c) => Some(*c as i128),
-            Self::Boolean(b) => Some(if *b {1} else {0}),
+            Self::Boolean(b) => Some(if *b { 1 } else { 0 }),
             _ => None,
         }
     }

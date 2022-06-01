@@ -14,7 +14,7 @@ use rayon::iter::ParallelIterator;
 
 use coeus_macros::iterator;
 
-use self::runtime::{invoke_runtime, StringClass};
+use self::runtime::{invoke_runtime, StringClass, invoke_runtime_with_method};
 
 use coeus_models::models::{BinaryObject, Class, CodeItem, DexFile, Instruction, MethodData, ValueType, InstructionOffset, InstructionSize, Method};
 
@@ -389,6 +389,7 @@ impl VM {
         }
     }
 
+    /// Returned MethodData is guaranteed to have an implementation
     pub fn lookup_method(&self, class_name: &str, method: &Method) -> Result<(Arc<DexFile>, &MethodData), VMException> {
          if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &method.proto_name).map(|d| (dex.clone(),d)))
@@ -400,6 +401,7 @@ impl VM {
 
         Err(VMException::LinkerError)
     }
+
 
     fn get_method<'a>(
         &'a self,
@@ -1925,13 +1927,22 @@ impl VM {
         }
     }
 
-    fn invoke_runtime(
+    pub fn invoke_runtime(
         &mut self,
         dex_file: Arc<DexFile>,
         method_idx: u32,
         arguments: Vec<Register>,
     ) -> Result<(), VMException> {
         invoke_runtime(self, dex_file, method_idx, arguments)?;
+        Ok(())
+    }
+    pub fn invoke_runtime_with_method(
+        &mut self,
+        class_name: &str,
+        method: Arc<Method>,
+        arguments: Vec<Register>,
+    ) -> Result<(), VMException> {
+        invoke_runtime_with_method(self, class_name, method, arguments)?;
         Ok(())
     }
 
