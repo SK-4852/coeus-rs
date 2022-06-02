@@ -1020,11 +1020,6 @@ impl Class {
     }
 
     pub fn code(&self, obj: &AnalyzeObject) -> String {
-        println!(
-            "{}/{}",
-            self.class.dex_identifier,
-            self.file.get_identifier()
-        );
         if let Some((multi_dex_file, _)) = &obj
             .files
             .get_multi_dex_from_dex_identifier(self.file.get_identifier())
