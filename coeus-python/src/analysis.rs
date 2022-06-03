@@ -63,9 +63,6 @@ impl Branching {
     pub fn has_dead_branch(&self) -> bool {
         let result = self.left.as_ref().map(|a| a.is_constant()).unwrap_or(false)
             && self.right.as_ref().map(|a| a.is_constant()).unwrap_or(true);
-        if result {
-            println!("{:?} {:?}", self.left, self.right);
-        }
         result
     }
     pub fn branch_offset(&self) -> Option<u32> {
@@ -232,7 +229,10 @@ impl Instruction {
                     }
                     analysis::instruction_flow::Value::Variable(l) => type_names.push(format!(
                         "{:?}",
-                        Instruction { instruction: (**l).to_owned() }.get_argument_types()
+                        Instruction {
+                            instruction: (**l).to_owned()
+                        }
+                        .get_argument_types()
                     )),
                     analysis::instruction_flow::Value::Unknown { ty } => {
                         type_names.push(ty.to_string())
@@ -271,6 +271,45 @@ impl Instruction {
                 .collect()
         } else {
             vec![]
+        }
+    }
+    pub fn get_arguments_as_value(&self) -> Vec<InstructionValue> {
+        if let LastInstruction::FunctionCall { args, .. } = &self.instruction {
+            args.iter()
+                .map(|value| InstructionValue {
+                    value: value.clone(),
+                })
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+}
+#[pyclass]
+#[derive(Clone)]
+pub struct InstructionValue {
+    value: coeus::coeus_analysis::analysis::instruction_flow::Value,
+}
+#[pymethods]
+impl InstructionValue {
+    pub fn get_value(&self, py: Python) -> Py<PyAny> {
+        match &self.value {
+            coeus::coeus_analysis::analysis::instruction_flow::Value::Bytes(a) => a.to_object(py),
+            coeus::coeus_analysis::analysis::instruction_flow::Value::Object { ty } => {
+                ty.to_object(py)
+            }
+            coeus::coeus_analysis::analysis::instruction_flow::Value::Number(i) => i.to_object(py),
+            coeus::coeus_analysis::analysis::instruction_flow::Value::Boolean(b) => b.to_object(py),
+            coeus::coeus_analysis::analysis::instruction_flow::Value::Byte(b) => b.to_object(py),
+            analysis::instruction_flow::Value::String(s) => s.to_object(py),
+            analysis::instruction_flow::Value::Char(c) => c.to_object(py),
+            analysis::instruction_flow::Value::Variable(instruction) => Instruction {
+                instruction: *instruction.clone(),
+            }
+            .into_py(py),
+            analysis::instruction_flow::Value::Unknown { ty } => ty.to_object(py),
+            analysis::instruction_flow::Value::Invalid => "invalid".to_object(py),
+            analysis::instruction_flow::Value::Empty => "empty".to_object(py),
         }
     }
 }

@@ -85,6 +85,8 @@ class Evidence:
     def as_native_symbol(self) -> NativeSymbol:
         """Interpret this `Evidence` as a `NativeSymbol`. Raises a `RuntimeException` if it cannot be cast."""
 class Instruction:
+    def get_arguments_as_value(self) -> list[Any]:
+        """Return all arguments as python values, if they are constant"""
     def get_string_arguments(self) -> list[str]:
         """Return all arguments to this functions that are constant strings."""
     def get_argument_types(self) -> list[str]:
