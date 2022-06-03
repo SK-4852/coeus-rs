@@ -1319,19 +1319,28 @@ impl InstructionFlow {
                     }
                 }
 
+                Instruction::MoveFrom16(dst, ..)
+                | Instruction::MoveWideFrom16(dst, ..)
+                | Instruction::MoveObjectFrom16(dst, ..) => {
+                    let dst: usize = dst.into();
+                    b.state.registers[dst] = Value::Empty;
+                }
+                Instruction::MoveWide(dst, ..) => {
+                    let dst: u32 = dst.into();
+                    b.state.registers[dst as usize] = Value::Empty;
+                }
+                Instruction::MoveWide16(dst, ..) => {
+                    let dst: usize = dst.into();
+                    b.state.registers[dst] = Value::Empty;
+                }
+
                 // branch finished
                 // we also use this for unhandled instructions
-                Instruction::ReturnVoid
-                | Instruction::Return(..)
-                | Instruction::Throw(..)
-                | Instruction::MoveFrom16(..)
-                | Instruction::MoveWide(..)
-                | Instruction::MoveWideFrom16(..)
-                | Instruction::MoveWide16(..)
-                | Instruction::MoveObjectFrom16(..) => {
+                Instruction::ReturnVoid | Instruction::Return(..) | Instruction::Throw(..) => {
                     branches_to_remove.push(b.id);
                     continue;
                 }
+
                 // We don't need those
                 Instruction::NotImpl(_, _) => {
                     if self.conservative {
