@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -1256,7 +1256,7 @@ impl Instruction {
                     ((data[1] & 0xff) as u8),
                 ]),
             ),
-            0x15 => Instruction::ConstLit16(high, data[0] as i16),
+            0x15 => Instruction::ConstLit32(high, (data[0] as i32) << 16),
             0x16..=0x19 => Instruction::ConstWide,
             0x1a => Instruction::ConstString(high, data[0]),
             0x1b => Instruction::ConstStringJumbo(
