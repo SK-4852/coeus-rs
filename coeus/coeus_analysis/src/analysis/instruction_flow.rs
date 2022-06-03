@@ -4,8 +4,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-
-
 use std::{
     collections::HashMap,
     ops::{Add, BitAnd, BitOr, BitXor, Mul, Rem, Shl, Shr, Sub},
@@ -26,6 +24,7 @@ pub struct InstructionFlow {
     dex: Arc<DexFile>,
     register_size: u16,
     already_branched: Vec<InstructionOffset>,
+    conservative: bool,
 }
 #[derive(Clone, Debug)]
 pub struct Branch {
@@ -732,6 +731,7 @@ impl InstructionFlow {
             dex,
             register_size,
             already_branched: vec![],
+            conservative: true,
         }
     }
 
@@ -1195,19 +1195,80 @@ impl InstructionFlow {
                 Instruction::FilledNewArray(_, _, _) => {}
                 Instruction::FilledNewArrayRange(_, _, _) => {}
                 Instruction::FillArrayData(_, _) => {}
-                Instruction::ArrayGetByte(_, _, _) => {}
-                Instruction::ArrayPutByte(_, _, _) => {}
-                Instruction::ArrayGetChar(_, _, _) => {}
-                Instruction::ArrayPutChar(_, _, _) => {}
+                Instruction::ArrayGetByte(dst, arr_reg, index_reg) => {
+                    if let (Value::Bytes(a), Value::Number(index)) = (
+                        &b.state.registers[arr_reg as usize],
+                        &b.state.registers[index_reg as usize],
+                    ) {
+                        b.state.registers[dst as usize] = Value::Byte(a[*index as usize]);
+                    } else {
+                        b.state.registers[dst as usize] = Value::Empty;
+                    }
+                }
+                Instruction::ArrayPutByte(src, arr_reg, index_reg) => {
+                    let index = if let Value::Number(n) = b.state.registers[index_reg as usize] {
+                        Some(n)
+                    } else {
+                        None
+                    };
+                    let byte = if let Value::Byte(b) = &b.state.registers[src as usize] {
+                        Some(*b)
+                    } else {
+                        None
+                    };
+                    if let (Value::Bytes(a), Some(index)) =
+                        (&mut b.state.registers[arr_reg as usize], index)
+                    {
+                        if let Some(b) = byte {
+                            a[index as usize] = b;
+                        }
+                    }
+                }
+                Instruction::ArrayGetChar(dst, arr_reg, index_reg) => {
+                    if let (Value::Bytes(a), Value::Number(index)) = (
+                        &b.state.registers[arr_reg as usize],
+                        &b.state.registers[index_reg as usize],
+                    ) {
+                        b.state.registers[dst as usize] = Value::Char(a[*index as usize] as char);
+                    } else {
+                        b.state.registers[dst as usize] = Value::Empty;
+                    }
+                }
+                Instruction::ArrayPutChar(src, arr_reg, index_reg) => {
+                    let index = if let Value::Number(n) = b.state.registers[index_reg as usize] {
+                        Some(n)
+                    } else {
+                        None
+                    };
+                    let byte = if let Value::Char(b) = &b.state.registers[src as usize] {
+                        Some(*b)
+                    } else {
+                        None
+                    };
+                    if let (Value::Bytes(a), Some(index)) =
+                        (&mut b.state.registers[arr_reg as usize], index)
+                    {
+                        if let Some(b) = byte {
+                            a[index as usize] = b as u8;
+                        }
+                    }
+                }
 
                 // FieldAccess
-                Instruction::StaticGet(_, _) => {}
-                Instruction::StaticGetWide(_, _) => {}
-                Instruction::StaticGetObject(_, _) => {}
-                Instruction::StaticGetBoolean(_, _) => {}
-                Instruction::StaticGetByte(_, _) => {}
-                Instruction::StaticGetChar(_, _) => {}
-                Instruction::StaticGetShort(_, _) => {}
+                Instruction::StaticGet(dst, _)
+                | Instruction::StaticGetObject(dst, _)
+                | Instruction::StaticGetBoolean(dst, _)
+                | Instruction::StaticGetByte(dst, _)
+                | Instruction::StaticGetChar(dst, _)
+                | Instruction::StaticGetShort(dst, _) => {
+                    let dst: u8 = (dst).into();
+                    b.state.registers[dst as usize] = Value::Empty;
+                }
+                Instruction::StaticGetWide(dst, _) => {
+                    let dst: u8 = (dst).into();
+                    b.state.registers[dst as usize] = Value::Empty;
+                    b.state.registers[dst as usize + 1] = Value::Empty;
+                }
                 Instruction::StaticPut(_, _) => {}
                 Instruction::StaticPutWide(_, _) => {}
                 Instruction::StaticPutObject(_, _) => {}
@@ -1215,13 +1276,22 @@ impl InstructionFlow {
                 Instruction::StaticPutByte(_, _) => {}
                 Instruction::StaticPutChar(_, _) => {}
                 Instruction::StaticPutShort(_, _) => {}
-                Instruction::InstanceGet(_, _, _) => {}
-                Instruction::InstanceGetWide(_, _, _) => {}
-                Instruction::InstanceGetObject(_, _, _) => {}
-                Instruction::InstanceGetBoolean(_, _, _) => {}
-                Instruction::InstanceGetByte(_, _, _) => {}
-                Instruction::InstanceGetChar(_, _, _) => {}
-                Instruction::InstanceGetShort(_, _, _) => {}
+
+                Instruction::InstanceGet(dst, _, _)
+                | Instruction::InstanceGetObject(dst, _, _)
+                | Instruction::InstanceGetShort(dst, _, _)
+                | Instruction::InstanceGetBoolean(dst, _, _)
+                | Instruction::InstanceGetByte(dst, _, _)
+                | Instruction::InstanceGetChar(dst, _, _) => {
+                    let dst: u8 = (dst).into();
+                    b.state.registers[dst as usize] = Value::Empty;
+                }
+                Instruction::InstanceGetWide(dst, ..) => {
+                    let dst: u8 = (dst).into();
+                    b.state.registers[dst as usize] = Value::Empty;
+                    b.state.registers[dst as usize + 1] = Value::Empty;
+                }
+
                 Instruction::InstancePut(_, _, _) => {}
                 Instruction::InstancePutWide(_, _, _) => {}
                 Instruction::InstancePutObject(_, _, _) => {}
@@ -1263,7 +1333,13 @@ impl InstructionFlow {
                     continue;
                 }
                 // We don't need those
-                Instruction::NotImpl(_, _) => {}
+                Instruction::NotImpl(_, _) => {
+                    if self.conservative {
+                        for reg in &mut b.state.registers {
+                            *reg = Value::Empty;
+                        }
+                    }
+                }
                 Instruction::ArrayData(_, _) => {}
                 Instruction::SwitchData(_) => {}
                 Instruction::Nop => {}
