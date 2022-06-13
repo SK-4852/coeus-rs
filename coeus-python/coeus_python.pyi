@@ -167,3 +167,5 @@ class AnalyzeObject:
         """Get all found manifests."""
     def __getitem__(self, name) -> list[tuple[str, bytes]]:
         """Access the resource specified by `name`"""
+    def find_dynamically_registered_functions(self, regex: str, libName: str) -> list[Evidence]:
+        """Find dynamically registered functions in `libName`, matching the name given by `regex`."""

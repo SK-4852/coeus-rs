@@ -1,10 +1,8 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-
 
 use std::sync::Arc;
 
@@ -84,6 +82,31 @@ impl AnalyzeObject {
                 manifest: a.android_manifest.clone(),
             })
             .collect()
+    }
+
+    /// Find all dynamically registered native functions
+    pub fn find_dynamically_registered_functions(
+        &self,
+        regex: &str,
+        lib_name: &str,
+    ) -> Vec<crate::analysis::Evidence> {
+        let reg = if let Ok(reg) = Regex::new(regex) {
+            reg
+        } else {
+            return vec![];
+        };
+        let bin_object = if let Some(lib) = self.files.binaries.get(lib_name) {
+            lib
+        } else {
+            return vec![];
+        };
+        coeus::coeus_analysis::analysis::native::find_dynamically_registered_function(
+            &reg,
+            bin_object.clone(),
+        )
+        .into_iter()
+        .map(|evidence| crate::analysis::Evidence { evidence })
+        .collect()
     }
 
     /// Find all functions in the dex file having the modifier `native`
