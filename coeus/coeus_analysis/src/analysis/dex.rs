@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -997,8 +997,8 @@ pub fn find_string_matches_for_string_entries(
             .filter_map(|(i, s)| {
                 Some(Evidence::String(StringEvidence {
                     content: s.1.to_str().ok()?.to_string(),
-                    place: Location::DexString(i as u32, s.0.clone()),
-                    context: Context::DexString(i as u32, s.0.clone()),
+                    place: Location::DexString(s.2 as u32, s.0.clone()),
+                    context: Context::DexString(s.2 as u32, s.0.clone()),
                     confidence_level: ConfidenceLevel::VeryLow,
                 }))
             })

@@ -51,12 +51,12 @@ impl<'a> MultiDexFile {
         }
     }
 
-    pub fn strings(&self) -> Vec<(Arc<DexFile>, &StringEntry)> {
-        let entries = iterator!(self.primary.strings)
-            .map(|s| (self.primary.clone(), s))
+    pub fn strings(&self) -> Vec<(Arc<DexFile>, &StringEntry, usize)> {
+        let entries = iterator!(self.primary.strings).enumerate()
+            .map(|(index,s)| (self.primary.clone(), s, index))
             .chain(
                 iterator!(self.secondary)
-                    .flat_map(|d| iterator!(d.strings).map(move |s| (d.clone(), s))),
+                    .flat_map(|d| iterator!(d.strings).enumerate().map(move |(index, s)| (d.clone(), s, index))),
             );
 
         entries.collect()

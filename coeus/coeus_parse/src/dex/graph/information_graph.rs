@@ -578,7 +578,7 @@ fn prepare_mappings(
         let method_node_index = g.add_node(InfoNode::MethodNode(method.clone(), name));
         all_mappings.insert(fqdn, method_node_index);
     }
-    for (_, string) in multi_dex_file.strings() {
+    for (_, string,_) in multi_dex_file.strings() {
         if let Ok(the_string) = string.to_str() {
             let the_string_key = format!("SN_{}", the_string);
             let _ = all_mappings
