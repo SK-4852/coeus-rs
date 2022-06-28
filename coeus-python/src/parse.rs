@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use coeus::coeus_analysis::analysis::dex::get_native_methods;
 use coeus::coeus_analysis::analysis::{
-    find_any, find_classes, find_fields, find_methods, find_string_matches, ALL_TYPES,
+    find_any, find_classes, find_fields, find_methods, ALL_TYPES,
 };
 use coeus::coeus_models::models::{AndroidManifest, DexFile, Files};
 use pyo3::exceptions::{PyIOError, PyRuntimeError};
@@ -239,7 +239,7 @@ impl AnalyzeObject {
     #[pyo3(text_signature = "($self, name,/)")]
     pub fn find_strings(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
         let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
-        let files = find_string_matches(&regex, &self.files);
+        let files = coeus::coeus_analysis::analysis::find_strings(&regex, &self.files);
         Ok(files
             .into_iter()
             .map(|evidence| crate::analysis::Evidence { evidence })

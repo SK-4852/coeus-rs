@@ -771,8 +771,8 @@ pub fn find_string_matches_for_method_name(reg: &Regex, files: &[MultiDexFile]) 
         let methods = dex.methods();
         let method_matches: Vec<_> = iterator!(methods)
             .enumerate()
-            .filter(|(_, (_, m))| reg.is_match(&m.method_name))
-            .map(|(_, (dex, m))| {
+            .filter(|(_, (_, m, _))| reg.is_match(&m.method_name))
+            .map(|(_, (dex, m, _))| {
                 Evidence::String(StringEvidence {
                     content: m.method_name.clone(),
                     place: Location::DexMethod(m.method_idx as u32, dex.clone()),
@@ -862,15 +862,14 @@ pub fn find_string_matches_for_field_name(
     iterator!(files).for_each(|dex| {
         let fields = dex.fields();
         let field_matches: Vec<_> = iterator!(fields)
-            .enumerate()
-            .filter(|(_, (dex, m))| match dex.get_string(m.name_idx as usize) {
+            .filter(|(dex, m, _)| match dex.get_string(m.name_idx as usize) {
                 Some(matched) => reg.is_match(matched),
                 None => false,
             })
-            .filter_map(|(i, (dex, m))| {
+            .filter_map(|(dex, m, index)| {
                 Some(Evidence::String(StringEvidence {
                     content: dex.get_string(m.name_idx as usize)?.to_owned(),
-                    place: Location::DexField(i as u32, dex.clone()),
+                    place: Location::DexField(*index as u32, dex.clone()),
                     context: Context::DexField(m.clone(), dex.clone()),
                     confidence_level: ConfidenceLevel::Medium,
                 }))
@@ -957,17 +956,16 @@ pub fn find_string_matches_for_proto(reg: &Regex, files: &[MultiDexFile]) -> Opt
     iterator!(files).for_each(|dex| {
         let protos = dex.protos();
         let proto_matches: Vec<Evidence> = iterator!(protos)
-            .enumerate()
             .filter(
-                |(_, (dex, proto))| match dex.get_string(proto.shorty_idx as usize) {
+                |(dex, proto, _)| match dex.get_string(proto.shorty_idx as usize) {
                     Some(shorty) => reg.is_match(shorty),
                     _ => false,
                 },
             )
-            .filter_map(|(i, s)| {
+            .filter_map(|s| {
                 Some(Evidence::String(StringEvidence {
                     content: s.0.get_string(s.1.shorty_idx as usize)?.to_string(),
-                    place: Location::DexMethod(i as u32, s.0.clone()),
+                    place: Location::DexMethod(s.2 as u32, s.0.clone()),
                     context: Context::DexProto(s.1.clone(), s.0.clone()),
                     confidence_level: ConfidenceLevel::Medium,
                 }))
@@ -989,12 +987,11 @@ pub fn find_string_matches_for_string_entries(
     iterator!(files).for_each(|dex| {
         let strings = dex.strings();
         let string_matches: Vec<Evidence> = iterator!(strings)
-            .enumerate()
-            .filter(|(_, s)| match s.1.to_str() {
+            .filter(|s| match s.1.to_str() {
                 Ok(r) => reg.is_match(r),
                 _ => false,
             })
-            .filter_map(|(i, s)| {
+            .filter_map(|s| {
                 Some(Evidence::String(StringEvidence {
                     content: s.1.to_str().ok()?.to_string(),
                     place: Location::DexString(s.2 as u32, s.0.clone()),

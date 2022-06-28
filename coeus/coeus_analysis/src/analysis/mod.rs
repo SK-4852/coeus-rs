@@ -279,7 +279,9 @@ const METHODS: [ObjectType; 2] = [ObjectType::Method, ObjectType::Proto];
 
 const FIELDS: [ObjectType; 1] = [ObjectType::Field];
 
-pub fn find_string_matches(reg: &Regex, files: &Files) -> Vec<Evidence> {
+const STRINGS: [ObjectType; 1] = [ObjectType::String];
+
+pub fn find_all_matches(reg: &Regex, files: &Files) -> Vec<Evidence> {
     let mut matches = find_string_matches_in_dex_with_type(&reg, &ALL_TYPES, &files.multi_dex);
     matches.extend(find_string_matches_in_elf(&reg, &files.binaries));
     matches
@@ -293,6 +295,12 @@ pub fn find_methods(reg: &Regex, files: &Files) -> Vec<Evidence> {
 }
 pub fn find_fields(reg: &Regex, files: &Files) -> Vec<Evidence> {
     find_string_matches_in_dex_with_type(reg, &FIELDS, &files.multi_dex)
+}
+
+pub fn find_strings(reg: &Regex, files: &Files) -> Vec<Evidence> {
+    let mut matches = find_string_matches_in_dex_with_type(&reg, &STRINGS, &files.multi_dex);
+    matches.extend(find_string_matches_in_elf(&reg, &files.binaries));
+    matches
 }
 
 pub fn find_any(reg: &Regex, object_types: &[ObjectType], files: &Files) -> Vec<Evidence> {

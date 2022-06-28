@@ -546,7 +546,7 @@ fn prepare_mappings(
             all_mappings.insert(format!("TUNKNOWN_TYPE_{}", ty), type_node_index);
         }
     }
-    for (file, field) in multi_dex_file.fields() {
+    for (file, field, _) in multi_dex_file.fields() {
         let field_identifier = format!(
             "F{}_{}_{}",
             file.identifier, field.class_idx, field.name_idx
@@ -560,7 +560,7 @@ fn prepare_mappings(
         ));
         all_mappings.insert(field_identifier, field_node_index);
     }
-    for (file, method) in multi_dex_file.methods() {
+    for (file, method, _) in multi_dex_file.methods() {
         let type_name = file.get_type_name(method.class_idx).unwrap();
         let fqdn = format!(
             "{}->{}_{}",

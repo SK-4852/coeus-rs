@@ -746,7 +746,7 @@ pub mod dex_module {
     #[rhai_fn(name = "find_string_matches")]
     pub fn find_string_matches_one(files: &mut Files, reg: ImmutableString) -> Array {
         let mut array = Array::new();
-        let evidences = crate::analysis::find_string_matches(&Regex::new(&reg).unwrap(), &files);
+        let evidences = crate::analysis::find_all_matches(&Regex::new(&reg).unwrap(), &files);
         for e in evidences {
             array.push(Dynamic::from(e.clone()));
         }
