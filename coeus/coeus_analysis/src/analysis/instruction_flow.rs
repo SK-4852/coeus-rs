@@ -826,6 +826,8 @@ impl InstructionFlow {
                     b.pc += offset as i32;
                     continue;
                 }
+                // we can ignore check casts and just do nothing
+                Instruction::CheckCast(..) => {}
 
                 Instruction::Test(test, left, right, offset) => {
                     if self.already_branched.contains(&b.pc) {

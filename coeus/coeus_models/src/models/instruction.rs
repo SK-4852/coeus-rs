@@ -119,6 +119,7 @@ pub enum Instruction {
     ConstString(u8, u16),
     ConstStringJumbo(u8, u32),
     ConstClass(u8, u16),
+    CheckCast(u8, u16),
 
     IntToByte(u4, u4),
     IntToChar(u4, u4),
@@ -168,7 +169,7 @@ pub enum Instruction {
     SwitchData(Switch),
 }
 
-static MNEMONICS: [&str; 76] = [
+static MNEMONICS: [&str; 77] = [
     "nop",
     "const-string",
     "const-string/jumbo",
@@ -245,6 +246,7 @@ static MNEMONICS: [&str; 76] = [
     "sub-int",
     "int-to-byte",
     "move-result",
+    "check-cast",
 ];
 
 impl Instruction {
@@ -301,6 +303,7 @@ impl Instruction {
             Instruction::SubIntDst(..) => MNEMONICS[73],
             Instruction::IntToByte(..) => MNEMONICS[74],
             Instruction::MoveResult(..) => MNEMONICS[75],
+            Instruction::CheckCast(..) => MNEMONICS[76],
             _ => MNEMONICS[0],
         }
     }
@@ -327,6 +330,12 @@ impl Instruction {
                 file.get_string(string_idx as usize)
                     .unwrap_or("INVALID")
                     .replace("\n", "\\n")
+            ),
+            &Instruction::CheckCast(reg, type_idx) => format!(
+                "{} v{}, \"{}\"",
+                MNEMONICS[76],
+                reg,
+                file.get_type_name(type_idx).unwrap_or("INVALID")
             ),
 
             &Instruction::NewArray(dst, size, type_idx) => format!(
@@ -1269,6 +1278,7 @@ impl Instruction {
                 ]),
             ),
             0x1c => Instruction::ConstClass(high, data[0]),
+            0x1f => Instruction::CheckCast(high, data[0]),
             0x8d => Instruction::IntToByte(u4::new(high & 0b1111), u4::new(high >> 4)),
             0x82 => Instruction::IntToChar(u4::new(high & 0b1111), u4::new(high >> 4)),
             0x21 => Instruction::ArrayLength(u4::new(high & 0b1111), u4::new(high >> 4)),

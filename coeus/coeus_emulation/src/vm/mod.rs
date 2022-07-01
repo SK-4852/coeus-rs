@@ -580,6 +580,8 @@ impl VM {
                         } 
                     }
                 }
+                // for now we just ignore checkcasts
+                Instruction::CheckCast(..) => {}
                 Instruction::SwitchData(_) => {}
                 Instruction::Throw(_) => {}
                 Instruction::Nop => {}
