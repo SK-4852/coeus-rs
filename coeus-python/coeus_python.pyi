@@ -160,7 +160,7 @@ class AnalyzeObject:
     def get_strings(self) -> list(Evidence):
         """Retrun all strings"""
     def get_methods(self) -> list(Evidence):
-        """Retrun all methods"""
+        """Return all methods"""
     def get_fields(self) -> list(Evidence):
         """Retrun all fields"""        
     def find_native_imports(self, file: str, pattern: str) -> list[Evidence]:
