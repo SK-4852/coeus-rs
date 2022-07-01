@@ -6,12 +6,16 @@
 
 use std::{
     convert::{TryFrom},
-    sync::Arc,
+    sync::{Arc,Mutex},
 };
 
 use goblin::elf::Sym;
 use regex::Regex;
 
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
+
+use coeus_macros::iterator;
 use coeus_models::models::{BinaryObject, Class, DexFile, Field, Files, Method, Proto};
 use serde::Serializer;
 
@@ -305,4 +309,29 @@ pub fn find_strings(reg: &Regex, files: &Files) -> Vec<Evidence> {
 
 pub fn find_any(reg: &Regex, object_types: &[ObjectType], files: &Files) -> Vec<Evidence> {
     find_string_matches_in_dex_with_type(reg, object_types, &files.multi_dex)
+}
+
+pub fn get_methods(files: &Files) -> Vec<Evidence> {
+    let mut all_methods = vec![];
+    let vec_lock = Arc::new(Mutex::new(&mut all_methods));
+    let multi_dex = &files.multi_dex;
+
+    iterator!(multi_dex).for_each(|dex| {
+        let method_matches: Vec<_> = iterator!(dex.methods())
+            .enumerate()
+            .map(|(_, (dex, m, _))| {
+                Evidence::String(StringEvidence {
+                    content: m.method_name.clone(),
+                    place: Location::DexMethod(m.method_idx as u32, dex.clone()),
+                    context: Context::DexMethod(m.clone(), dex.clone()),
+                    confidence_level: ConfidenceLevel::Medium,
+                })
+            })
+            .collect();
+        if let Ok(mut lock) = vec_lock.lock() {
+            lock.extend(method_matches);
+        }
+    });
+    all_methods
+
 }

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use coeus::coeus_analysis::analysis::dex::get_native_methods;
 use coeus::coeus_analysis::analysis::{
     find_any, find_classes, find_fields, find_methods, ALL_TYPES,
+    get_methods,
 };
 use coeus::coeus_models::models::{AndroidManifest, DexFile, Files};
 use pyo3::exceptions::{PyIOError, PyRuntimeError};
@@ -250,6 +251,45 @@ impl AnalyzeObject {
     pub fn find_classes(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
         let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
         let files = find_classes(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    /// Get all classes
+    #[pyo3(text_signature = "($self)")]
+    pub fn get_classes(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new("").map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_classes(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    /// Get all methods
+    #[pyo3(text_signature = "($self,/)")]
+    pub fn get_methods(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let files = get_methods(&self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    /// Get all strings
+    #[pyo3(text_signature = "($self,/)")]
+    pub fn get_strings(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new("").map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = coeus::coeus_analysis::analysis::find_strings(&regex, &self.files);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
+    /// Get all fields
+    #[pyo3(text_signature = "($self,/)")]
+    pub fn get_fields(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new("").map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_fields(&regex, &self.files);
         Ok(files
             .into_iter()
             .map(|evidence| crate::analysis::Evidence { evidence })
