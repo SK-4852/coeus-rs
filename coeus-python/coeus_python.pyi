@@ -155,13 +155,13 @@ class AnalyzeObject:
          """Look for strings matching the specified regex"""
     def find_classes(self, regex: str) -> list[Evidence]:
          """Look for classes matching the specified regex"""
-    def get_classes(self) -> list(Evidence):
+    def get_classes(self) -> list[Evidence]:
         """Return all classes"""
-    def get_strings(self) -> list(Evidence):
+    def get_strings(self) -> list[Evidence]:
         """Return all strings"""
-    def get_methods(self) -> list(Evidence):
+    def get_methods(self) -> list[Evidence]:
         """Return all methods"""
-    def get_fields(self) -> list(Evidence):
+    def get_fields(self) -> list[Evidence]:
         """Return all fields"""        
     def find_native_imports(self, file: str, pattern: str) -> list[Evidence]:
          """Check the dynamic_string table of the elf binary to look for imported functions"""
