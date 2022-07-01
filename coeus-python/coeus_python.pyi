@@ -156,7 +156,7 @@ class AnalyzeObject:
     def find_classes(self, regex: str) -> list[Evidence]:
          """Look for classes matching the specified regex"""
     def get_classes(self) -> list(Evidence):
-        """Retrun all classes"""
+        """Return all classes"""
     def get_strings(self) -> list(Evidence):
         """Retrun all strings"""
     def get_methods(self) -> list(Evidence):
