@@ -158,7 +158,7 @@ class AnalyzeObject:
     def get_classes(self) -> list(Evidence):
         """Return all classes"""
     def get_strings(self) -> list(Evidence):
-        """Retrun all strings"""
+        """Return all strings"""
     def get_methods(self) -> list(Evidence):
         """Return all methods"""
     def get_fields(self) -> list(Evidence):
