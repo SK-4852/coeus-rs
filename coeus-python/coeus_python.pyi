@@ -162,7 +162,7 @@ class AnalyzeObject:
     def get_methods(self) -> list(Evidence):
         """Return all methods"""
     def get_fields(self) -> list(Evidence):
-        """Retrun all fields"""        
+        """Return all fields"""        
     def find_native_imports(self, file: str, pattern: str) -> list[Evidence]:
          """Check the dynamic_string table of the elf binary to look for imported functions"""
     def find_native_exports(self, file: str, pattern: str) -> list[Evidence]:
