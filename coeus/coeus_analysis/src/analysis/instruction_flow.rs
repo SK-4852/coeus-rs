@@ -1131,7 +1131,7 @@ impl InstructionFlow {
 
                 // const
                 Instruction::ConstLit4(reg, val) => {
-                    b.state.registers[u8::from(reg) as usize] = Value::Number(u8::from(val) as i128)
+                    b.state.registers[u8::from(reg) as usize] = Value::Number(i8::from(val) as i128)
                 }
                 Instruction::ConstLit16(reg, val) => {
                     b.state.registers[reg as usize] = Value::Number(val as i128)

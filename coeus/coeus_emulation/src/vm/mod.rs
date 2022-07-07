@@ -1093,7 +1093,7 @@ impl VM {
                 }
                 Instruction::Const => {}
                 &Instruction::ConstLit4(dst, lit) => {
-                    let lit: u8 = lit.into();
+                    let lit: i8 = lit.into();
                     let dst: u8 = dst.into();
                     let new_register = Register::Literal(lit.into());
                     self.update_register(dst, new_register)?;

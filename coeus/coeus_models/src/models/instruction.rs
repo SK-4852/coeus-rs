@@ -10,7 +10,7 @@ use std::{
     io::{Read, Seek},
     sync::Arc,
 };
-use ux::u4;
+use ux::{i4, u4};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Instruction {
@@ -112,7 +112,7 @@ pub enum Instruction {
     Return(u8),
 
     Const,
-    ConstLit4(u4, u4),
+    ConstLit4(u4, i4),
     ConstLit16(u8, i16),
     ConstLit32(u8, i32),
     ConstWide,
@@ -1258,7 +1258,14 @@ impl Instruction {
 
             0x0e => Instruction::ReturnVoid,
             0x0f..=0x11 => Instruction::Return(high),
-            0x12 => Instruction::ConstLit4(u4::new(high & 0b1111), u4::new(high >> 4)),
+            0x12 => Instruction::ConstLit4(
+                u4::new(high & 0b1111),
+                if (high >> 4) & 0b1000 == 0b1000 {
+                    i4::new(0) - i4::new((high >> 5) as i8)
+                } else {
+                    i4::new((high >> 5) as i8)
+                },
+            ),
             0x13 => Instruction::ConstLit16(high, data[0] as i16),
             0x14 => Instruction::ConstLit32(
                 high,

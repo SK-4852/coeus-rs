@@ -370,7 +370,7 @@ impl<'a> Flow<'a> {
 
                 Instruction::ConstLit4(dst, lit) => {
                     let dst: u8 = (dst).into();
-                    let lit: u8 = lit.into();
+                    let lit: i8 = lit.into();
                     branch.registers[dst as usize] = StaticRegister {
                         register: dst,
                         ty: Some("I".to_string()),
