@@ -169,7 +169,7 @@ pub enum Instruction {
     SwitchData(Switch),
 }
 
-static MNEMONICS: [&str; 77] = [
+static MNEMONICS: [&str; 78] = [
     "nop",
     "const-string",
     "const-string/jumbo",
@@ -247,6 +247,7 @@ static MNEMONICS: [&str; 77] = [
     "int-to-byte",
     "move-result",
     "check-cast",
+    "throw",
 ];
 
 impl Instruction {
@@ -304,6 +305,7 @@ impl Instruction {
             Instruction::IntToByte(..) => MNEMONICS[74],
             Instruction::MoveResult(..) => MNEMONICS[75],
             Instruction::CheckCast(..) => MNEMONICS[76],
+            Instruction::Throw(..) => MNEMONICS[77],
             _ => MNEMONICS[0],
         }
     }
@@ -315,6 +317,7 @@ impl Instruction {
         file: Arc<DexFile>,
     ) -> String {
         match self {
+            &Instruction::Throw(reg) => format!("{} v{}", MNEMONICS[77], reg),
             &Instruction::ConstString(reg, string_idx) => format!(
                 "{} v{}, \"{}\"",
                 MNEMONICS[1],
@@ -322,6 +325,7 @@ impl Instruction {
                 file.get_string(string_idx)
                     .unwrap_or("INVALID")
                     .replace("\n", "\\n")
+                    .replace("\"", "\\\"")
             ),
             &Instruction::ConstStringJumbo(reg, string_idx) => format!(
                 "{} v{}, \"{}\"",
@@ -332,7 +336,7 @@ impl Instruction {
                     .replace("\n", "\\n")
             ),
             &Instruction::CheckCast(reg, type_idx) => format!(
-                "{} v{}, \"{}\"",
+                "{} v{}, {}",
                 MNEMONICS[76],
                 reg,
                 file.get_type_name(type_idx).unwrap_or("INVALID")

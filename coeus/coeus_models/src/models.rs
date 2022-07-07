@@ -628,14 +628,14 @@ impl MethodData {
                     let line = code_lines
                         .entry(label.0.into())
                         .or_insert_with(|| "".to_string());
-                    *line = format!(":{} #{:#x}\n{} ", label.1, 2 * label.0, line,);
+                    *line = format!(":{} #{:#x}\n{} ", label.1, label.0, line,);
                 }
                 let mut lines_of_code: Vec<_> = code_lines.into_iter().collect();
                 lines_of_code.sort_by(|(addr1, _), (addr2, _)| addr1.partial_cmp(addr2).unwrap());
                 lines.extend(
                     lines_of_code
                         .into_iter()
-                        .map(|(addr, line)| format!("{} #{:#x}", line, 2 * u32::from(addr))),
+                        .map(|(addr, line)| format!("{} #{:#x}", line, u32::from(addr))),
                 );
             }
             lines.push(format!(".end method"));

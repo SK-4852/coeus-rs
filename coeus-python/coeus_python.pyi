@@ -5,8 +5,27 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 
+from tokenize import String
 from typing import Any, Optional
-
+class Flow:
+    def __init__(self, m: Method):
+        """Construct a new static analysis flow"""
+    def reset(self, start = 0):
+        """Reset the state of the flow and start over (with PC = start)"""
+    def next_instruction(self):
+        """Step one instruction over, this throws if the flow is finished"""
+    def get_state(self) -> list[FlowBranch]:
+        """Get a list of all current branches"""
+class FlowBranch:
+    def get_state(self) -> FlowState:
+        """Get the state of the current branch"""
+    def get_pc(self) -> int:
+        """Get current PC"""
+    def get_current_instruction(self) -> str:
+        """Print the current instruction"""
+class FlowState:
+    def print_state(self) -> str:
+        """Print the current state"""
 class Branching:
     def has_dead_branch(self) -> bool: ...
     def branch_offset(self) -> Optional[int]: ...

@@ -51,6 +51,7 @@ pub struct State {
     pub id: u64,
     pub registers: Vec<Value>,
     pub last_instruction: Option<LastInstruction>,
+    pub tainted: bool
 }
 impl Default for State {
     fn default() -> Self {
@@ -59,6 +60,7 @@ impl Default for State {
             id,
             registers: Default::default(),
             last_instruction: Default::default(),
+            tainted: false
         }
     }
 }
@@ -717,6 +719,11 @@ impl InstructionFlow {
     ) -> Option<(InstructionSize, Instruction)> {
         self.method.get(offset).map(|a| a.clone())
     }
+    pub fn reset(&mut self, start: u32) {
+        self.branches.clear();
+        self.already_branched.clear();
+        self.new_branch(InstructionOffset(start));
+    }
     pub fn new(method: CodeItem, dex: Arc<DexFile>) -> Self {
         let register_size = method.register_size;
         let method: HashMap<_, _> = method
@@ -851,6 +858,7 @@ impl InstructionFlow {
                         }
                         continue;
                     } else {
+                        b.state.tainted = true;
                         let mut new_branch = b.clone();
                         new_branch.pc += offset as i32;
                         branches_to_add.push(new_branch);
@@ -876,6 +884,8 @@ impl InstructionFlow {
                             b.pc += offset as i32;
                         }
                         continue;
+                    } else {
+                        b.state.tainted = true;
                     }
                     let mut new_branch = b.clone();
                     new_branch.pc += offset as i32;
@@ -1382,6 +1392,7 @@ impl InstructionFlow {
                 id: rand::random(),
                 registers: vec![Value::Empty; self.register_size as usize],
                 last_instruction: None,
+                tainted: false
             },
         });
     }
@@ -1395,6 +1406,9 @@ impl InstructionFlow {
     }
     pub fn get_all_states(&self) -> Vec<&State> {
         self.branches.iter().map(|b| &b.state).collect()
+    }
+    pub fn get_all_branches(&self) -> &Vec<Branch> {
+        &self.branches
     }
 }
 

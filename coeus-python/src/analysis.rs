@@ -14,7 +14,7 @@ use coeus::{
     coeus_analysis::analysis::{
         self,
         dex::find_cross_reference_array,
-        instruction_flow::{InstructionFlow, LastInstruction},
+        instruction_flow::{Branch, InstructionFlow, LastInstruction, State},
         Context,
     },
     coeus_emulation::vm::{runtime::StringClass, Register, Value, VM},
@@ -46,6 +46,21 @@ pub struct Instruction {
 }
 
 #[pyclass]
+pub struct Flow {
+    instruction_flow: InstructionFlow,
+    method: Method,
+}
+#[pyclass]
+pub struct FlowBranch {
+    branch: Branch,
+    method: Method,
+}
+#[pyclass]
+pub struct FlowState {
+    state: State,
+    method: Method,
+}
+#[pyclass]
 pub struct Branching {
     test: TestFunction,
     left: Option<coeus::coeus_analysis::analysis::instruction_flow::Value>,
@@ -56,11 +71,92 @@ pub struct Branching {
 }
 
 #[pymethods]
+impl FlowState {
+    pub fn print_state(&self) -> String {
+        format!("{:?}", self.state)
+    }
+}
+
+#[pymethods]
+impl FlowBranch {
+    pub fn get_state(&self) -> FlowState {
+        FlowState {
+            state: self.branch.state.clone(),
+            method: self.method.clone(),
+        }
+    }
+    pub fn get_pc(&self) -> u32 {
+        self.branch.pc.0
+    }
+    pub fn get_current_instruction(&self) -> PyResult<String> {
+        let code = self
+            .method
+            .method_data
+            .as_ref()
+            .and_then(|m| m.code.as_ref())
+            .map(|a| &a.insns)
+            .unwrap();
+        let i = code
+            .iter()
+            .find(|(size, offset, _)| offset.0 == self.get_pc());
+        let (_, _, instruction) = if let Some(i) = i {
+            i
+        } else {
+            return Err(PyRuntimeError::new_err("There is no instruction"));
+        };
+        Ok(instruction.disassembly_from_opcode(
+            self.get_pc() as i32,
+            &mut HashMap::new(),
+            self.method.file.clone(),
+        ))
+    }
+}
+
+#[pymethods]
+impl Flow {
+    #[new]
+    pub fn new(method: &crate::analysis::Method) -> PyResult<Self> {
+        let code = if let Some(md) = method.method_data.as_ref().and_then(|a| a.code.as_ref()) {
+            md
+        } else {
+            return Err(PyRuntimeError::new_err("Could not find method data"));
+        };
+        let instruction_flow = InstructionFlow::new(code.clone(), method.file.clone());
+        Ok(Self {
+            method: method.clone(),
+            instruction_flow,
+        })
+    }
+
+    pub fn reset(&mut self, start: u32) {
+        self.instruction_flow.reset(start);
+    }
+    pub fn next_instruction(&mut self) -> PyResult<()> {
+        if self.instruction_flow.is_done() {
+            return Err(PyRuntimeError::new_err("All done"));
+        }
+        self.instruction_flow.next_instruction();
+        Ok(())
+    }
+    pub fn get_state(&self) -> Vec<FlowBranch> {
+        let states = self.instruction_flow.get_all_branches();
+        states
+            .iter()
+            .map(|s| FlowBranch {
+                branch: s.clone(),
+                method: self.method.clone(),
+            })
+            .collect()
+    }
+}
+
+#[pymethods]
 impl Branching {
     pub fn get_method(&self) -> Method {
         self.method.clone()
     }
     pub fn has_dead_branch(&self) -> bool {
+
         let result = self.left.as_ref().map(|a| a.is_constant()).unwrap_or(false)
             && self.right.as_ref().map(|a| a.is_constant()).unwrap_or(true);
         result
@@ -754,6 +850,7 @@ impl Method {
             .collect::<Vec<_>>();
         branchings
     }
+
     pub fn find_all_branch_decisions(&self, vm: &mut DexVm) -> Vec<Branching> {
         let mut branchings = vec![];
         if let Some(code) = &self.method_data {
@@ -761,6 +858,9 @@ impl Method {
                 let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone());
                 let branches = instruction_flow.get_all_branch_decisions();
                 for mut b in branches {
+                    if b.state.tainted {
+                        continue;
+                    }
                     let (instruction_size, instruction) =
                         if let Some(a) = instruction_flow.get_instruction(&b.pc) {
                             a
@@ -1144,5 +1244,8 @@ pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Branching>()?;
     m.add_class::<NativeSymbol>()?;
     m.add_class::<FieldAccess>()?;
+    m.add_class::<Flow>()?;
+    m.add_class::<FlowState>()?;
+    m.add_class::<FlowBranch>()?;
     Ok(())
 }
