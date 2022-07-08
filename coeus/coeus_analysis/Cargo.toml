@@ -26,4 +26,4 @@ serde_json = {version = "1.0", optional = true}
 
 [features]
 # rhai-script = ["rhai", "serde_json", "base64"]
-# wasm = ["rhai/wasm-bindgen"]
+wasm = []

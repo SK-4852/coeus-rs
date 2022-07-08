@@ -17,7 +17,7 @@ parse = ["coeus_parse"]
 # graphviz = ["coeus_parse/graphviz"]
 wasm = ["coeus_emulation/wasm", "coeus_parse/wasm", "coeus_models/wasm", "coeus_analysis/wasm"]
 
-rhai-script = ["coeus_emulation/rhai-script", "coeus_parse/rhai-script", "coeus_models/rhai-script", "coeus_analysis/rhai-script"]
+# rhai-script = ["coeus_emulation/rhai-script", "coeus_parse/rhai-script", "coeus_models/rhai-script", "coeus_analysis/rhai-script"]
 
 [dependencies]
 coeus_emulation = {path = "./coeus_emulation", optional = true}

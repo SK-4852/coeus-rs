@@ -31,12 +31,14 @@ pub struct Branch {
     pub id: u64,
     pub pc: InstructionOffset,
     pub state: State,
+    pub previous_pc: InstructionOffset
 }
 impl Default for Branch {
     fn default() -> Self {
         Self {
             id: rand::random(),
             pc: InstructionOffset(0),
+            previous_pc: InstructionOffset(0),
             state: Default::default(),
         }
     }
@@ -775,7 +777,7 @@ impl InstructionFlow {
                 branches.reverse();
                 // only show the last of the loop branches
                 branches.sort_by_key(|b| b.id);
-                branches.dedup_by(|left, right| left.id == right.id && left.pc == right.pc);
+                branches.dedup_by(|left, right| left.id == right.id && left.previous_pc == right.previous_pc);
                 break;
             }
             iterations += 1;
@@ -822,6 +824,7 @@ impl InstructionFlow {
         let mut branches_to_remove: Vec<u64> = vec![];
         let mut branches_to_taint: Vec<u64> = vec![];
         for b in &mut self.branches {
+            b.previous_pc = b.pc;
             let instruction = if let Some(instruction) = self.method.get(&b.pc) {
                 instruction
             } else {
@@ -1424,6 +1427,7 @@ impl InstructionFlow {
         self.branches.push(Branch {
             id: rand::random(),
             pc,
+            previous_pc: pc,
             state: State {
                 id: rand::random(),
                 registers: vec![Value::Empty; self.register_size as usize],

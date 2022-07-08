@@ -169,7 +169,7 @@ pub enum Instruction {
     SwitchData(Switch),
 }
 
-static MNEMONICS: [&str; 78] = [
+static MNEMONICS: [&str; 79] = [
     "nop",
     "const-string",
     "const-string/jumbo",
@@ -248,6 +248,7 @@ static MNEMONICS: [&str; 78] = [
     "move-result",
     "check-cast",
     "throw",
+    "move"
 ];
 
 impl Instruction {
@@ -962,6 +963,7 @@ impl Instruction {
                 )
             }
             Instruction::MoveObject(dst, src) => format!("{} v{}, v{}", MNEMONICS[43], dst, src),
+            Instruction::Move(dst, src) => format!("{} v{}, v{}", MNEMONICS[78], dst, src),
             Instruction::ConstLit4(dst, lit) => format!("{} v{}, {:#x}", MNEMONICS[44], dst, lit),
             Instruction::ConstLit16(dst, lit) => format!("{} v{}, {:#x}", MNEMONICS[45], dst, lit),
             Instruction::ConstLit32(dst, lit) => format!("{} v{}, {:#x}", MNEMONICS[46], dst, lit),
@@ -1261,9 +1263,9 @@ impl Instruction {
             0x12 => Instruction::ConstLit4(
                 u4::new(high & 0b1111),
                 if (high >> 4) & 0b1000 == 0b1000 {
-                    i4::new(0) - i4::new((high >> 5) as i8)
+                    i4::new(0) - i4::new(((high >> 4) & 0b0111) as i8)
                 } else {
-                    i4::new((high >> 5) as i8)
+                    i4::new(((high >> 4) & 0b0111) as i8)
                 },
             ),
             0x13 => Instruction::ConstLit16(high, data[0] as i16),
