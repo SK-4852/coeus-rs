@@ -5,6 +5,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from coeus_python import AnalyzeObject
+import sys
 
 # Extract the APK and parse the dex files
 
@@ -90,3 +91,4 @@ if foundBcClass:
     print("We found the BC classes")
 else:
     print("Proguard rule needed for BC")
+    sys.exit(1)

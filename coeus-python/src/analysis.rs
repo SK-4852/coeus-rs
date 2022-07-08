@@ -58,7 +58,7 @@ pub struct FlowBranch {
 #[pyclass]
 pub struct FlowState {
     state: State,
-    method: Method,
+    _method: Method,
 }
 #[pyclass]
 pub struct Branching {
@@ -68,6 +68,7 @@ pub struct Branching {
     offset_true: InstructionOffset,
     offset_false: InstructionOffset,
     method: Method,
+    is_tainted: bool,
 }
 
 #[pymethods]
@@ -82,7 +83,7 @@ impl FlowBranch {
     pub fn get_state(&self) -> FlowState {
         FlowState {
             state: self.branch.state.clone(),
-            method: self.method.clone(),
+            _method: self.method.clone(),
         }
     }
     pub fn get_pc(&self) -> u32 {
@@ -96,9 +97,7 @@ impl FlowBranch {
             .and_then(|m| m.code.as_ref())
             .map(|a| &a.insns)
             .unwrap();
-        let i = code
-            .iter()
-            .find(|(size, offset, _)| offset.0 == self.get_pc());
+        let i = code.iter().find(|(_, offset, _)| offset.0 == self.get_pc());
         let (_, _, instruction) = if let Some(i) = i {
             i
         } else {
@@ -156,10 +155,9 @@ impl Branching {
         self.method.clone()
     }
     pub fn has_dead_branch(&self) -> bool {
-
         let result = self.left.as_ref().map(|a| a.is_constant()).unwrap_or(false)
             && self.right.as_ref().map(|a| a.is_constant()).unwrap_or(true);
-        result
+        result && !self.is_tainted
     }
     pub fn branch_offset(&self) -> Option<u32> {
         if !self.has_dead_branch() {
@@ -858,7 +856,7 @@ impl Method {
                 let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone());
                 let branches = instruction_flow.get_all_branch_decisions();
                 for mut b in branches {
-                    if b.state.tainted {
+                    if b.state.tainted || b.state.loop_count.iter().any(|(_, value)| *value > 1) {
                         continue;
                     }
                     let (instruction_size, instruction) =
@@ -893,7 +891,7 @@ impl Method {
                         } else {
                             b.state.registers[u8::from(right) as usize].clone()
                         };
-
+                        
                         branchings.push(Branching {
                             test,
                             left: Some(left),
@@ -901,6 +899,8 @@ impl Method {
                             offset_true: b.pc + offset as i32,
                             offset_false: b.pc + (instruction_size.0 / 2),
                             method: self.clone(),
+                            is_tainted: b.state.tainted
+                                || b.state.loop_count.iter().any(|(_, value)| *value > 1),
                         });
                     } else if let coeus::coeus_models::models::Instruction::TestZero(
                         test,
@@ -915,6 +915,7 @@ impl Method {
                         } else {
                             b.state.registers[left as usize].clone()
                         };
+                        
                         branchings.push(Branching {
                             test,
                             left: Some(left),
@@ -922,6 +923,8 @@ impl Method {
                             offset_false: b.pc + (instruction_size.0 / 2),
                             offset_true: b.pc + offset as i32,
                             method: self.clone(),
+                            is_tainted: b.state.tainted
+                                || b.state.loop_count.iter().any(|(_, value)| *value > 1),
                         })
                     }
                 }

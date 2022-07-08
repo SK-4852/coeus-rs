@@ -39,17 +39,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aae1277d39aeec15cb388266ecc24b11c80469deae6067e17a1a7aa9e5c1f234"
 
 [[package]]
-name = "ahash"
-version = "0.7.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43bb833f0bf979d8475d38fbf09ed3b8a55e1885fe93ad3f93239fc6a4f17b98"
-dependencies = [
- "getrandom",
- "once_cell",
- "version_check",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "0.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -254,7 +243,6 @@ dependencies = [
  "petgraph",
  "rayon",
  "regex",
- "rhai",
  "serde",
  "serde-xml-rs",
  "serde_json",
@@ -267,7 +255,6 @@ dependencies = [
 name = "coeus_analysis"
 version = "0.1.1"
 dependencies = [
- "base64",
  "coeus_macros",
  "coeus_models",
  "coeus_parse",
@@ -278,9 +265,7 @@ dependencies = [
  "rand",
  "rayon",
  "regex",
- "rhai",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -298,7 +283,6 @@ dependencies = [
  "petgraph",
  "rand",
  "rayon",
- "rhai",
  "sha-1",
  "sha2",
 ]
@@ -325,7 +309,6 @@ dependencies = [
  "rand",
  "rayon",
  "regex",
- "rhai",
  "serde",
  "serde-xml-rs",
  "serde_json",
@@ -351,7 +334,6 @@ dependencies = [
  "rand",
  "rayon",
  "regex",
- "rhai",
  "serde",
  "serde-xml-rs",
  "serde_json",
@@ -797,11 +779,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "716d3d89f35ac6a34fd0eed635395f4c3b76fa889338a4632e5231a8684216bd"
 dependencies = [
  "cfg-if 1.0.0",
- "js-sys",
  "stdweb",
  "time",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
@@ -1161,31 +1140,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rhai"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0a6abd5b3f1fe29984451102a69c79e65212f6c70015a68245a43a8ecc2a88b"
-dependencies = [
- "ahash",
- "instant",
- "num-traits",
- "rhai_codegen",
- "smallvec",
- "smartstring",
-]
-
-[[package]]
-name = "rhai_codegen"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2a81e59b9782e8b85052aaed305d71dfcdec1bfa53e774c19ac1085307cbf39"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1360,21 +1314,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "smallvec"
-version = "1.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
-
-[[package]]
-name = "smartstring"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31aa6a31c0c2b21327ce875f7e8952322acfcfd0c27569a6e18a647281352c9b"
-dependencies = [
- "static_assertions",
-]
-
-[[package]]
 name = "standback"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1382,12 +1321,6 @@ checksum = "a2beb4d1860a61f571530b3f855a1b538d0200f7871c63331ecd6f17b1f014f8"
 dependencies = [
  "version_check",
 ]
-
-[[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stdweb"

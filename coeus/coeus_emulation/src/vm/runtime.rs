@@ -1321,7 +1321,7 @@ impl StringClass {
         Ok(())
     }
     pub fn length(vm: &mut VM, args: &[Register]) -> Result<(), VMException> {
-        if let Register::Reference(_name, address) = &args[0] {
+        if let Some(Register::Reference(_name, address)) = args.get(0).as_ref() {
             log::debug!("Executing built in String->length");
             if let Some(Value::Object(builder_instance)) = vm.heap.get_mut(&address) {
                 match builder_instance.internal_state.get("tmp_string") {
