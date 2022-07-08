@@ -9,7 +9,7 @@ name = "coeus_python"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.15.1", features = ["extension-module", "abi3-py36"] }
+pyo3 = { version = "0.16.5", features = ["extension-module", "abi3-py37"] }
 coeus = {version = "0.1.1", path = "../coeus"}
 regex = "1.5.4"
 rayon = "1.5.1"
