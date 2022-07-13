@@ -1,0 +1,19 @@
+/* Frida hook for OkHttp cert pinner
+ *
+ * Usage:
+ * 1. Make sure frida-server is running on the target phone
+ * 2. frida -U -l hook.js -f {{ PACKAGENAME }} --no-pause
+ * 3. Intercept the traffic with a proxy of your choice
+ */
+
+Java.perform(function() {
+    patchCertPinner();
+});
+
+function patchCertPinner(){
+    const pinner = Java.use("{{ CLASSNAME }}");
+    const pinnerCheck = pinner.{{ FUNCTIONNAME }}.overload("{{ VAR1 }}", "{{ VAR2 }}")
+    pinnerCheck.implementation = function() {
+        console.log("Called empty CertificatePinner");
+    }
+}
