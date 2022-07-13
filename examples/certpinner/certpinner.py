@@ -7,11 +7,12 @@
 
 import re
 from pathlib import Path
+from typing import Optional
 from coeus_python import AnalyzeObject
 from xml.dom.minidom import parseString
 
 
-def find_pinner(apk):
+def find_pinner(apk) -> Optional[tuple[str,str,str,str]]:
     """Finds the CertificatePinner.check() function.
     https://github.com/square/okhttp/blob/3ad1912f783e108b3d0ad2c4a5b1b89b827e4db9/okhttp/src/jvmMain/kotlin/okhttp3/CertificatePinner.kt#L149
 
@@ -30,23 +31,34 @@ def find_pinner(apk):
         for str in strings:
             references = str.cross_references(ao)
             for ref in references:
-                signature = ref.downcast().signature()
-                # E.g. Lokhttp3/CertificatePinner;->check$okhttp(Ljava/lang/String;Lkotlin/jvm/functions/Function0;)V
-                r = re.match(r"L(.+);->(.+)\(L(.+);L(.+);\)V", signature)
-                return r.groups()
+                try:
+                    method = ref.as_method()
+                    class_name = method.get_class().friendly_name()
+                    method_name = method.name()
+                    arg1, arg2 = method.get_argument_types_string()
+                    return class_name, method_name, arg1, arg2
+                except:
+                    pass
+    return None
 
 
-def find_package_name(apk) -> str:
+def find_package_name(apk) -> Optional[str]:
     ao = AnalyzeObject(apk, False, 20)
     for manifest in ao.get_manifests():
         xml = parseString(manifest.get_xml())
         packagename = xml.getElementsByTagName('manifest')[0].attributes['package'].value
         return packagename
+    return None
 
 
 def create_hook(apk):
-    classname, functionname, var1, var2 = find_pinner(apk)
+    pinner_result = find_pinner(apk)
+    if pinner_result is None:
+        return
+    classname, functionname, var1, var2 = pinner_result
     packagename = find_package_name(apk)
+    if packagename is None:
+        return
     print(f"Found: packagename={packagename}, classname={classname}, functionname={functionname}, var1={var1}, var2={var2}")
 
     with open('hook.js.j2') as f:
