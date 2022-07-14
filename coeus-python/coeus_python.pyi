@@ -50,7 +50,7 @@ class DexVm:
     
 class VmResult:
     def get_value(self) -> Any:
-        """"Cast the VmResult to a python native type"""
+        """Cast the VmResult to a python native type"""
 class DexClassObject:
     pass
 class DexString:
