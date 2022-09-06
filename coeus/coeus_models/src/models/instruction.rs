@@ -169,7 +169,7 @@ pub enum Instruction {
     SwitchData(Switch),
 }
 
-static MNEMONICS: [&str; 79] = [
+static MNEMONICS: [&str; 80] = [
     "nop",
     "const-string",
     "const-string/jumbo",
@@ -248,7 +248,8 @@ static MNEMONICS: [&str; 79] = [
     "move-result",
     "check-cast",
     "throw",
-    "move"
+    "move",
+    "const-class"
 ];
 
 impl Instruction {
@@ -737,7 +738,7 @@ impl Instruction {
                             .collect::<Vec<_>>()
                             .join("");
                         format!(
-                            "{} {{{}}} {}->{}({}){}",
+                            "{} {{{}}}, {}->{}({}){}",
                             MNEMONICS[37],
                             arg_regs
                                 .iter()
@@ -797,7 +798,12 @@ impl Instruction {
                         .unwrap_or("".to_string())
                 )
             }
-            &Instruction::InstancePut(src, obj, field) => {
+            &Instruction::ConstClass(dst, obj) => {
+                format!("{} v{}, {}", MNEMONICS[79], dst, file.get_type_name(obj).unwrap_or("INVALID"))
+            }
+            &Instruction::InstancePut(src, obj, field)
+            | &Instruction::InstancePutBoolean(src, obj, field)
+            | &Instruction::InstancePutByte(src, obj, field) => {
                 let instruction_type = file
                     .fields
                     .get(field as usize)

@@ -219,6 +219,7 @@ dependencies = [
 name = "coeus_models"
 version = "0.1.1"
 dependencies = [
+ "abxml",
  "bitflags",
  "cesu8",
  "coeus_macros",
