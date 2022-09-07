@@ -114,6 +114,8 @@ class Instruction:
         """Return the type names of all arguments. If the argument was a result of a previous function call, it prints the debug string of the inner arguments."""
     def execute(self, vm: DexVm) -> Any:
         """Try executing the instruction with the VM. This can help evaluate possible `const` functions or simple static string encryptors"""
+    def get_function_name(self) -> str:
+        """Return the name of the executing function, or throw a `RuntimeException` if this instruction is not a function call"""
 class Method:
     def name(self) -> str:
         """"Return the name of this function."""

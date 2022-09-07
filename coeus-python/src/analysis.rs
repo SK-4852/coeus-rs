@@ -28,6 +28,7 @@ use pyo3::{
 };
 use pyo3::{prelude::*, types::PyList};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use regex::Regex;
 
 use crate::{
     parse::{AnalyzeObject, Runtime},
@@ -376,6 +377,16 @@ impl Instruction {
                 .collect()
         } else {
             vec![]
+        }
+    }
+    pub fn get_function_name(&self) -> PyResult<String> {
+        if let LastInstruction::FunctionCall {
+            name: _, signature, ..
+        } = &self.instruction
+        {
+            Ok(signature.clone())
+        } else {
+            Err(PyRuntimeError::new_err("Instruction is no function"))
         }
     }
 }
@@ -1002,11 +1013,12 @@ impl Method {
     }
     pub fn find_method_call(&self, signature: &str) -> Vec<Instruction> {
         let mut f_calls = vec![];
+        let regex = Regex::new(signature).unwrap();
         if let Some(code) = &self.method_data {
             if let Some(code) = &code.code {
                 let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone());
                 let branches = instruction_flow
-                    .find_all_calls(signature)
+                    .find_all_calls_regex(&regex)
                     .iter()
                     .filter_map(|a| a.state.last_instruction.clone())
                     .map(|last_instruction| Instruction {
@@ -1241,6 +1253,7 @@ impl Class {
     }
     pub fn find_method_call(&self, signature: &str) -> Vec<Instruction> {
         let methods = self.get_methods();
+        let regex = Regex::new(signature).unwrap();
         let function_calls = methods
             .par_iter()
             .flat_map(|m| {
@@ -1250,7 +1263,7 @@ impl Class {
                         let mut instruction_flow =
                             InstructionFlow::new(code.clone(), self.file.clone());
                         let branches = instruction_flow
-                            .find_all_calls(signature)
+                            .find_all_calls_regex(&regex)
                             .iter()
                             .filter_map(|a| a.state.last_instruction.clone())
                             .map(|last_instruction| Instruction {

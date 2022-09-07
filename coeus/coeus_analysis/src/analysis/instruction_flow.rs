@@ -16,6 +16,7 @@ use coeus_models::models::{
 use coeus_parse::coeus_emulation::vm::{
     runtime::StringClass, ClassInstance, Register, VMException, VM,
 };
+use regex::Regex;
 
 #[derive(Clone, Debug)]
 pub struct InstructionFlow {
@@ -31,7 +32,7 @@ pub struct Branch {
     pub id: u64,
     pub pc: InstructionOffset,
     pub state: State,
-    pub previous_pc: InstructionOffset
+    pub previous_pc: InstructionOffset,
 }
 impl Default for Branch {
     fn default() -> Self {
@@ -777,15 +778,24 @@ impl InstructionFlow {
                 branches.reverse();
                 // only show the last of the loop branches
                 branches.sort_by_key(|b| b.id);
-                branches.dedup_by(|left, right| left.id == right.id && left.previous_pc == right.previous_pc);
+                branches.dedup_by(|left, right| {
+                    left.id == right.id && left.previous_pc == right.previous_pc
+                });
                 break;
             }
             iterations += 1;
         }
         branches
     }
-
     pub fn find_all_calls(&mut self, signature: &str) -> Vec<Branch> {
+        self.find_all_calls_with_op(|s| s == signature)
+    }
+    pub fn find_all_calls_regex(&mut self, regex: &Regex) -> Vec<Branch> {
+        self.find_all_calls_with_op(|s| {
+            regex.is_match(s)
+        })
+    }
+    pub fn find_all_calls_with_op<F: Fn(&str) -> bool>(&mut self, op: F) -> Vec<Branch> {
         let mut branches = vec![];
         let mut iterations = 0;
         self.new_branch(InstructionOffset(0));
@@ -801,7 +811,7 @@ impl InstructionFlow {
                         class: _class,
                         args: _args,
                         result: _result,
-                    }) if sig == signature => {
+                    }) if op(sig) => {
                         if let Some(b) = self.branches.iter().find(|a| a.state.id == state.id) {
                             branches.push(b.clone());
                         }
