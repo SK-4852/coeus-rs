@@ -143,6 +143,12 @@ impl AnalyzeObject {
         let mut results = vec![];
         for key in self.files.binaries.keys() {
             if key.contains(name) {
+                if key.ends_with(".xml") {
+                    if let Some(xml) = self.files.decode_resource(self.files.binaries[key].data()) {
+                        results.push((key.clone(), xml.as_bytes().to_vec()));
+                        continue;
+                    }
+                } 
                 results.push((key.clone(), self.files.binaries[key].data().to_vec()));
             }
         }

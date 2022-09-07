@@ -111,8 +111,8 @@ pub fn find_cross_reference(place: &Context, multi_dex: &MultiDexFile) -> Vec<Ev
         Context::DexClass(class, dex_file) => {
             find_references_to_class(class, dex_file.clone(), multi_dex, place)
         }
-        Context::DexType(typ, _, dex_file) => {
-            find_references_to_type(*typ, dex_file.clone(), multi_dex, place)
+        Context::DexType(typ, name, dex_file) => {
+            find_references_to_type(*typ, name, dex_file.clone(), multi_dex, place)
         }
         Context::DexMethod(method, dex_file) => {
             find_references_to_method(method, dex_file.clone(), multi_dex, place)
@@ -154,7 +154,7 @@ pub fn find_cross_reference_array<'a: 'b, 'b>(
                     };
                     new_place = Context::DexType(*typ, name.to_string(), dex_file.clone());
 
-                    find_references_to_type(*typ, dex_file, multi_dex, &new_place)
+                    find_references_to_type(*typ, name, dex_file, multi_dex, &new_place)
                 }
                 Context::DexMethod(method, dex_file) => {
                     let (multi_dex, dex_file) = if let Some((md, f)) =
@@ -211,7 +211,7 @@ fn find_references_to_string<'a: 'b, 'b>(
     let mut context_matches: Vec<Evidence> = vec![];
     let vec_loc = Arc::new(Mutex::new(&mut context_matches));
     let classes = multi_dex.classes();
-    iterator!(classes).for_each(|(_f, c)| {
+    iterator!(classes).for_each(|(f, c)| {
         let methods_containing_references: Vec<_> = iterator!(c.codes)
             .filter(|md| match md.code.as_ref() {
                 Some(code) => {
@@ -232,7 +232,7 @@ fn find_references_to_string<'a: 'b, 'b>(
             .map(|m| {
                 Evidence::CrossReference(CrossReferenceEvidence {
                     place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
-                    place_context: Context::DexMethod(m.method.clone(), dex_file.clone()),
+                    place_context: Context::DexMethod(m.method.clone(), f.clone()),
                     context: place.clone(),
                 })
             })
@@ -247,6 +247,7 @@ fn find_references_to_string<'a: 'b, 'b>(
 //TODO: refactor
 fn find_references_to_type<'a: 'b, 'b>(
     typ: u32,
+    name: &str,
     dex_file: Arc<DexFile>,
     multi_dex: &'a MultiDexFile,
     place: &'b Context,
@@ -262,17 +263,28 @@ fn find_references_to_type<'a: 'b, 'b>(
             .filter(|md| match md.code.as_ref() {
                 Some(code) => {
                     let references =
-                        iterator!(code.insns)
-                            .filter(|(_, _, instruction)| match instruction {
+                            iterator!(code.insns).filter(|(_, _, instruction)| match instruction {
                                 coeus_models::models::Instruction::Invoke(method_idx)
                                 | coeus_models::models::Instruction::InvokeVirtual(
                                     _,
                                     method_idx,
                                     _,
                                 )
-                                | coeus_models::models::Instruction::InvokeSuper(_, method_idx, _)
-                                | coeus_models::models::Instruction::InvokeDirect(_, method_idx, _)
-                                | coeus_models::models::Instruction::InvokeStatic(_, method_idx, _)
+                                | coeus_models::models::Instruction::InvokeSuper(
+                                    _,
+                                    method_idx,
+                                    _,
+                                )
+                                | coeus_models::models::Instruction::InvokeDirect(
+                                    _,
+                                    method_idx,
+                                    _,
+                                )
+                                | coeus_models::models::Instruction::InvokeStatic(
+                                    _,
+                                    method_idx,
+                                    _,
+                                )
                                 | coeus_models::models::Instruction::InvokeInterface(
                                     _,
                                     method_idx,
@@ -291,140 +303,13 @@ fn find_references_to_type<'a: 'b, 'b>(
                                 }
 
                                 coeus_models::models::Instruction::NewInstance(_, type_idx) => {
-                                    (*type_idx) == typ as u16
+                                    if let Some(s) = f.get_type_name(*type_idx as usize) {
+                                        s == name
+                                    } else {
+                                        false
+                                    }
                                 }
 
-                                coeus_models::models::Instruction::StaticGet(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetWide(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetObject(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetBoolean(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetByte(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetChar(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetShort(_, field_id)
-                                | coeus_models::models::Instruction::StaticPut(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutWide(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutObject(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutBoolean(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutByte(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutChar(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutShort(_, field_id)
-                                | coeus_models::models::Instruction::InstanceGet(_, _, field_id)
-                                | coeus_models::models::Instruction::InstanceGetWide(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstanceGetObject(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstanceGetBoolean(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstanceGetByte(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstanceGetChar(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstanceGetShort(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstancePut(_, _, field_id)
-                                | coeus_models::models::Instruction::InstancePutWide(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstancePutObject(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstancePutBoolean(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstancePutByte(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstancePutChar(
-                                    _,
-                                    _,
-                                    field_id,
-                                )
-                                | coeus_models::models::Instruction::InstancePutShort(
-                                    _,
-                                    _,
-                                    field_id,
-                                ) => match dex_file.fields.get((*field_id) as usize) {
-                                    Some(field) => field.class_idx == typ as u16,
-                                    _ => false,
-                                },
-                                _ => false,
-                            });
-                    references.count() > 0
-                }
-                None => false,
-            })
-            .map(|m| {
-                Evidence::CrossReference(CrossReferenceEvidence {
-                    place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
-                    place_context: Context::DexMethod(m.method.clone(), dex_file.clone()),
-                    context: place.clone(),
-                })
-            })
-            .collect();
-        if let Ok(mut lock) = vec_loc.lock() {
-            lock.extend(methods_containing_references);
-        }
-    });
-    context_matches
-}
-
-fn find_references_to_field<'a: 'b, 'b>(
-    field_idx: &'b Field,
-    dex_file: Arc<DexFile>,
-    _multi_dex: &'a MultiDexFile,
-    place: &'b Context,
-) -> Vec<Evidence> {
-    let mut context_matches: Vec<Evidence> = vec![];
-    let vec_loc = Arc::new(Mutex::new(&mut context_matches));
-    let field_index = if let Some(f_i) = iterator!(dex_file.fields)
-        .enumerate()
-        .filter_map(|(idx, f)| {
-            if f.as_ref() == field_idx {
-                Some(idx)
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>()
-        .first()
-    {
-        *f_i as u16
-    } else {
-        return vec![];
-    };
-
-    iterator!(dex_file.classes).for_each(|c| {
-        let methods_containing_references: Vec<_> = iterator!(c.codes)
-            .filter_map(|md| match md.code.as_ref() {
-                Some(code) => {
-                    let references =
-                            iterator!(code.insns).filter(|(_, _, instruction)| match instruction {
                                 coeus_models::models::Instruction::StaticGet(_, field_id)
                                 | coeus_models::models::Instruction::StaticGetWide(_, field_id)
                                 | coeus_models::models::Instruction::StaticGetObject(_, field_id)
@@ -506,10 +391,115 @@ fn find_references_to_field<'a: 'b, 'b>(
                                     _,
                                     _,
                                     field_id,
-                                ) => *field_id == field_index,
-
+                                ) => match f.fields.get((*field_id) as usize) {
+                                    Some(field) => {
+                                        if let Some(type_name) = f.get_type_name(field.class_idx) {
+                                            type_name == name
+                                        } else {
+                                            false
+                                        }
+                                    }
+                                    _ => false,
+                                },
                                 _ => false,
                             });
+                    references.count() > 0
+                }
+                None => false,
+            })
+            .map(|m| {
+                Evidence::CrossReference(CrossReferenceEvidence {
+                    place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
+                    place_context: Context::DexMethod(m.method.clone(), f.clone()),
+                    context: place.clone(),
+                })
+            })
+            .collect();
+        if let Ok(mut lock) = vec_loc.lock() {
+            lock.extend(methods_containing_references);
+        }
+    });
+    context_matches
+}
+
+fn find_references_to_field<'a: 'b, 'b>(
+    field_idx: &'b Field,
+    dex_file: Arc<DexFile>,
+    multi_dex: &'a MultiDexFile,
+    place: &'b Context,
+) -> Vec<Evidence> {
+    let mut context_matches: Vec<Evidence> = vec![];
+    let vec_loc = Arc::new(Mutex::new(&mut context_matches));
+    let field_fqdn = format!(
+        "{}->{}",
+        dex_file
+            .get_type_name(field_idx.type_idx as usize)
+            .unwrap_or(""),
+        field_idx.name
+    );
+    let classes = multi_dex.classes();
+    iterator!(classes).for_each(|(f, c)| {
+        let methods_containing_references: Vec<_> = iterator!(c.codes)
+            .filter_map(|md| match md.code.as_ref() {
+                Some(code) => {
+                    let references =
+                        iterator!(code.insns).filter(|(_, _, instruction)| match instruction {
+                            coeus_models::models::Instruction::StaticGet(_, field_id)
+                            | coeus_models::models::Instruction::StaticGetWide(_, field_id)
+                            | coeus_models::models::Instruction::StaticGetObject(_, field_id)
+                            | coeus_models::models::Instruction::StaticGetBoolean(_, field_id)
+                            | coeus_models::models::Instruction::StaticGetByte(_, field_id)
+                            | coeus_models::models::Instruction::StaticGetChar(_, field_id)
+                            | coeus_models::models::Instruction::StaticGetShort(_, field_id)
+                            | coeus_models::models::Instruction::StaticPut(_, field_id)
+                            | coeus_models::models::Instruction::StaticPutWide(_, field_id)
+                            | coeus_models::models::Instruction::StaticPutObject(_, field_id)
+                            | coeus_models::models::Instruction::StaticPutBoolean(_, field_id)
+                            | coeus_models::models::Instruction::StaticPutByte(_, field_id)
+                            | coeus_models::models::Instruction::StaticPutChar(_, field_id)
+                            | coeus_models::models::Instruction::StaticPutShort(_, field_id)
+                            | coeus_models::models::Instruction::InstanceGet(_, _, field_id)
+                            | coeus_models::models::Instruction::InstanceGetWide(_, _, field_id)
+                            | coeus_models::models::Instruction::InstanceGetObject(
+                                _,
+                                _,
+                                field_id,
+                            )
+                            | coeus_models::models::Instruction::InstanceGetBoolean(
+                                _,
+                                _,
+                                field_id,
+                            )
+                            | coeus_models::models::Instruction::InstanceGetByte(_, _, field_id)
+                            | coeus_models::models::Instruction::InstanceGetChar(_, _, field_id)
+                            | coeus_models::models::Instruction::InstanceGetShort(_, _, field_id)
+                            | coeus_models::models::Instruction::InstancePut(_, _, field_id)
+                            | coeus_models::models::Instruction::InstancePutWide(_, _, field_id)
+                            | coeus_models::models::Instruction::InstancePutObject(
+                                _,
+                                _,
+                                field_id,
+                            )
+                            | coeus_models::models::Instruction::InstancePutBoolean(
+                                _,
+                                _,
+                                field_id,
+                            )
+                            | coeus_models::models::Instruction::InstancePutByte(_, _, field_id)
+                            | coeus_models::models::Instruction::InstancePutChar(_, _, field_id)
+                            | coeus_models::models::Instruction::InstancePutShort(_, _, field_id) =>
+                            {
+                                let field = f.fields[*field_id as usize].clone();
+                                let fqdn = format!(
+                                    "{}->{}",
+                                    f.get_type_name(field.type_idx as usize).unwrap_or(""),
+                                    field.name
+                                );
+                                fqdn == field_fqdn
+                            }
+
+                            _ => false,
+                        });
                     Some((md, references.collect::<Vec<_>>()))
                 }
                 None => None,
@@ -620,7 +610,7 @@ fn find_references_to_method<'a: 'b, 'b>(
 
 fn find_references_to_class<'a: 'b, 'b>(
     class_idx: &'b Class,
-    dex_file: Arc<DexFile>,
+    _dex_file: Arc<DexFile>,
     multi_dex: &'a MultiDexFile,
     place: &'b Context,
 ) -> Vec<Evidence> {
@@ -632,17 +622,28 @@ fn find_references_to_class<'a: 'b, 'b>(
             .filter(|md| match md.code.as_ref() {
                 Some(code) => {
                     let references =
-                        iterator!(code.insns)
-                            .filter(|(_, _, instruction)| match instruction {
+                            iterator!(code.insns).filter(|(_, _, instruction)| match instruction {
                                 coeus_models::models::Instruction::Invoke(method_idx)
                                 | coeus_models::models::Instruction::InvokeVirtual(
                                     _,
                                     method_idx,
                                     _,
                                 )
-                                | coeus_models::models::Instruction::InvokeSuper(_, method_idx, _)
-                                | coeus_models::models::Instruction::InvokeDirect(_, method_idx, _)
-                                | coeus_models::models::Instruction::InvokeStatic(_, method_idx, _)
+                                | coeus_models::models::Instruction::InvokeSuper(
+                                    _,
+                                    method_idx,
+                                    _,
+                                )
+                                | coeus_models::models::Instruction::InvokeDirect(
+                                    _,
+                                    method_idx,
+                                    _,
+                                )
+                                | coeus_models::models::Instruction::InvokeStatic(
+                                    _,
+                                    method_idx,
+                                    _,
+                                )
                                 | coeus_models::models::Instruction::InvokeInterface(
                                     _,
                                     method_idx,
@@ -661,20 +662,30 @@ fn find_references_to_class<'a: 'b, 'b>(
                                 }
 
                                 coeus_models::models::Instruction::NewInstance(_, type_idx) => {
-                                    (*type_idx) == class_idx.class_idx as u16
+                                    if let Some(s) = f.get_type_name(*type_idx as usize) {
+                                        s == &class_idx.class_name
+                                    } else {
+                                        false
+                                    }
                                 }
 
                                 coeus_models::models::Instruction::StaticGet(_, field_id)
                                 | coeus_models::models::Instruction::StaticGetWide(_, field_id)
                                 | coeus_models::models::Instruction::StaticGetObject(_, field_id)
-                                | coeus_models::models::Instruction::StaticGetBoolean(_, field_id)
+                                | coeus_models::models::Instruction::StaticGetBoolean(
+                                    _,
+                                    field_id,
+                                )
                                 | coeus_models::models::Instruction::StaticGetByte(_, field_id)
                                 | coeus_models::models::Instruction::StaticGetChar(_, field_id)
                                 | coeus_models::models::Instruction::StaticGetShort(_, field_id)
                                 | coeus_models::models::Instruction::StaticPut(_, field_id)
                                 | coeus_models::models::Instruction::StaticPutWide(_, field_id)
                                 | coeus_models::models::Instruction::StaticPutObject(_, field_id)
-                                | coeus_models::models::Instruction::StaticPutBoolean(_, field_id)
+                                | coeus_models::models::Instruction::StaticPutBoolean(
+                                    _,
+                                    field_id,
+                                )
                                 | coeus_models::models::Instruction::StaticPutByte(_, field_id)
                                 | coeus_models::models::Instruction::StaticPutChar(_, field_id)
                                 | coeus_models::models::Instruction::StaticPutShort(_, field_id)
@@ -739,8 +750,14 @@ fn find_references_to_class<'a: 'b, 'b>(
                                     _,
                                     _,
                                     field_id,
-                                ) => match dex_file.fields.get((*field_id) as usize) {
-                                    Some(field) => field.class_idx == class_idx.class_idx as u16,
+                                ) => match f.fields.get((*field_id) as usize) {
+                                    Some(field) => {
+                                        if let Some(class_name) = f.get_type_name(field.class_idx) {
+                                            class_name == class_idx.class_name
+                                        } else {
+                                            false
+                                        }
+                                    }
                                     _ => false,
                                 },
                                 _ => false,
@@ -751,8 +768,8 @@ fn find_references_to_class<'a: 'b, 'b>(
             })
             .map(|m| {
                 Evidence::CrossReference(CrossReferenceEvidence {
-                    place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
-                    place_context: Context::DexMethod(m.method.clone(), dex_file.clone()),
+                    place: Location::DexMethod(m.method.method_idx as u32, f.clone()),
+                    place_context: Context::DexMethod(m.method.clone(), f.clone()),
                     context: place.clone(),
                 })
             })
@@ -821,27 +838,18 @@ pub fn find_string_matches_for_type_name(
         let types = dex.types();
         let type_matches: Vec<Evidence> = iterator!(types)
             .filter(
-                |type_idx| match (**type_idx).0.strings.get(((**type_idx).1) as usize) {
+                |(dex_file, type_idx)| match dex_file.strings.get((*type_idx) as usize) {
                     Some(name) => reg.is_match(&name.to_str_lossy()),
                     None => false,
                 },
             )
-            .filter_map(|type_idx| {
-                let type_name = (*type_idx)
-                    .0
-                    .strings
-                    .get(((*type_idx).1) as usize)?
-                    .to_str()
-                    .ok()?;
+            .filter_map(|(dex_file, type_idx)| {
+                let type_name = dex_file.strings.get((*type_idx) as usize)?.to_str().ok()?;
 
                 Some(Evidence::String(StringEvidence {
                     content: type_name.to_owned(),
-                    place: Location::Type((*type_idx).1, (*type_idx).0.clone()),
-                    context: Context::DexType(
-                        (*type_idx).1,
-                        type_name.to_string(),
-                        (*type_idx).0.clone(),
-                    ),
+                    place: Location::Type(*type_idx, dex_file.clone()),
+                    context: Context::DexType(*type_idx, type_name.to_string(), dex_file.clone()),
                     confidence_level: ConfidenceLevel::Medium,
                 }))
             })
