@@ -538,6 +538,9 @@ impl Evidence {
     }
 
     pub fn downcast(&self, py: Python) -> PyResult<Py<PyAny>> {
+        if let Ok(fa) = self.as_field_access() {
+            return Ok(fa.into_py(py));
+        }
         if let Ok(method) = self.as_method() {
             return Ok(method.into_py(py));
         }
@@ -658,6 +661,71 @@ impl Evidence {
             })
         } else {
             Err(PyRuntimeError::new_err("not a string"))
+        }
+    }
+    #[pyo3(text_signature = "($self)")]
+    pub fn as_field_access(&self) -> PyResult<self::FieldAccess> {
+        if let analysis::Evidence::Instructions(instructions) = &self.evidence {
+            let (field, file) =
+                if let analysis::Context::DexField(field, file) = &instructions.context {
+                    (field, file)
+                } else {
+                    return Err(PyRuntimeError::new_err("not a field"));
+                };
+            let class = if let Some(class) = file.get_class_by_type(field.class_idx) {
+                class
+            } else {
+                let mut default_class = models::Class::default();
+                let type_name = file.get_type_name(field.class_idx).unwrap_or("UNKNOWN");
+                default_class.class_name = type_name.to_string();
+                default_class.class_idx = field.class_idx as u32;
+                Arc::new(default_class)
+            };
+            let mut access_flags = None;
+            if let Some(class_data) = &class.class_data {
+                for i_f in &class_data.instance_fields {
+                    if let Some(instance_field) = file.fields.get(i_f.field_idx as usize) {
+                        if instance_field == field {
+                            access_flags = Some(i_f.access_flags);
+                            break;
+                        }
+                    }
+                }
+                for s_f in &class_data.static_fields {
+                    if let Some(static_field) = file.fields.get(s_f.field_idx as usize) {
+                        if static_field == field {
+                            access_flags = Some(s_f.access_flags);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            let dex_field = DexField {
+                field: field.clone(),
+                access_flags,
+                file: file.clone(),
+                field_name: if let analysis::Evidence::String(s) = &self.evidence {
+                    Some(s.content.clone())
+                } else {
+                    None
+                },
+                dex_class: Class {
+                    class,
+                    file: file.clone(),
+                },
+            };
+            Ok(FieldAccess {
+                field: dex_field,
+                place: instructions.place.clone(),
+                instruction: instructions
+                    .instructions
+                    .get(0)
+                    .cloned()
+                    .unwrap_or_default(),
+            })
+        } else {
+            Err(PyRuntimeError::new_err("not a field"))
         }
     }
     /// Cast the Evidence as a string by extracting the Context
@@ -891,7 +959,7 @@ impl Method {
                         } else {
                             b.state.registers[u8::from(right) as usize].clone()
                         };
-                        
+
                         branchings.push(Branching {
                             test,
                             left: Some(left),
@@ -915,7 +983,7 @@ impl Method {
                         } else {
                             b.state.registers[left as usize].clone()
                         };
-                        
+
                         branchings.push(Branching {
                             test,
                             left: Some(left),

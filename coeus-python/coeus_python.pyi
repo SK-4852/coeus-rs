@@ -99,6 +99,8 @@ class Evidence:
         """Interpret this `Evidence` as a `Class`. Raises a `RuntimeException` if it cannot be cast."""
     def as_string(self) -> DexString:
         """Interpret this `Evidence` as a `String`. Raises a `RuntimeException` if it cannot be cast."""
+    def as_field_access(self) -> FieldAccess:
+        """Interpret this `Evidence` as a `FieldAccess`. Raises a `RuntimeException` if it cannot be cast."""
     def as_field(self) -> DexField:
         """Interpret this `Evidence` as a `Field`. Raises a `RuntimeException` if it cannot be cast."""
     def as_native_symbol(self) -> NativeSymbol:
