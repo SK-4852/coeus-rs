@@ -382,7 +382,7 @@ fn find_references_to_type<'a: 'b, 'b>(
             .map(|m| {
                 Evidence::CrossReference(CrossReferenceEvidence {
                     place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
-                    place_context: Context::DexMethod(m.method.clone(), dex_file.clone()),
+                    place_context: Context::DexMethod(m.method.clone(), f.clone()),
                     context: place.clone(),
                 })
             })
