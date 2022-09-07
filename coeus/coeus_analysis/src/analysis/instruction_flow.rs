@@ -6,6 +6,7 @@
 
 use std::{
     collections::HashMap,
+    fmt::{Display},
     ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Mul, Rem, Shl, Shr, Sub},
     sync::Arc,
 };
@@ -93,6 +94,37 @@ pub enum LastInstruction {
         right: Value,
         operation: fn(&Value, &Value) -> Value,
     },
+}
+
+impl Display for LastInstruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let LastInstruction::FunctionCall {
+            name,
+            signature: _,
+            class_name,
+            class: _,
+            method: _,
+            args,
+            result,
+        } = self
+        {
+            f.write_str(&format!(
+                "{}->{}({}) : {}",
+                class_name,
+                name,
+                args.iter()
+                    .map(|a| format!("{}", a))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                result
+                    .as_ref()
+                    .and_then(|a| Some(format!("{}", a)))
+                    .unwrap_or("Void".to_string())
+            ))
+        } else {
+            f.write_str(&format!("{:?}", self))
+        }
+    }
 }
 
 impl LastInstruction {
@@ -266,6 +298,29 @@ pub enum Value {
     Object { ty: String },
     Invalid,
     Empty,
+}
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(s) => f.write_str(&format!("\"{}\"", s)),
+            Value::Number(n) => f.write_str(&n.to_string()),
+            Value::Boolean(b) => f.write_str(&b.to_string()),
+            Value::Char(c) => f.write_str(&format!("'{}'", c)),
+            Value::Byte(b) => f.write_str(&format!("{:02x}", b)),
+            Value::Bytes(b) => f.write_str(&format!(
+                "[{}]",
+                b.iter()
+                    .map(|a| format!("{:02x}", a))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )),
+            Value::Variable(v) => {f.write_str(&v.to_string())}
+            Value::Unknown { ty } => f.write_str(&format!("Unknown{{ ty={} }}", ty)),
+            Value::Object { ty } => f.write_str(&format!("Object{{ ty={} }}", ty)),
+            Value::Invalid => f.write_str("INVALID"),
+            Value::Empty => f.write_str("EMPTY"),
+        }
+    }
 }
 
 impl Value {
@@ -791,9 +846,7 @@ impl InstructionFlow {
         self.find_all_calls_with_op(|s| s == signature)
     }
     pub fn find_all_calls_regex(&mut self, regex: &Regex) -> Vec<Branch> {
-        self.find_all_calls_with_op(|s| {
-            regex.is_match(s)
-        })
+        self.find_all_calls_with_op(|s| regex.is_match(s))
     }
     pub fn find_all_calls_with_op<F: Fn(&str) -> bool>(&mut self, op: F) -> Vec<Branch> {
         let mut branches = vec![];

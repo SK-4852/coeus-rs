@@ -268,7 +268,31 @@ impl Branching {
 #[pymethods]
 impl Instruction {
     pub fn __str__(&self) -> String {
-        format!("{:?}", self.instruction)
+        if let LastInstruction::FunctionCall {
+            name,
+            signature: _,
+            class_name,
+            class: _,
+            method: _,
+            args,
+            result,
+        } = &self.instruction
+        {
+            format!(
+                "{}->{}({}) : {}",
+                class_name,
+                name,
+                args.iter()
+                    .map(|a| format!("{}", a))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                result
+                    .as_ref().map(|a| format!("{}", a))
+                    .unwrap_or_else(||"Void".to_string())
+            )
+        } else {
+            format!("{:?}", self.instruction)
+        }
     }
     pub fn execute(&mut self, py: Python, vm: &mut DexVm) -> PyResult<Py<PyAny>> {
         if let Ok(mut vm) = vm.vm.lock() {
