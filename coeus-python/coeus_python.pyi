@@ -27,9 +27,12 @@ class FlowState:
     def print_state(self) -> str:
         """Print the current state"""
 class Branching:
-    def has_dead_branch(self) -> bool: ...
-    def branch_offset(self) -> Optional[int]: ...
-    def get_method(self) -> Method: ...
+    def has_dead_branch(self) -> bool:
+        """Check if there are any dead branches"""
+    def branch_offset(self) -> Optional[int]:
+        """Get the branch offset from the respective branch point"""
+    def get_method(self) -> Method:
+        """Get the method the branching happens"""
 class Manifest:
     def get_xml(self) -> str:
         """Return the content of the AndroidManifest as found in the APK"""
@@ -38,7 +41,8 @@ class Manifest:
 class Runtime:
     pass
 class DexVm:
-    def __init__(self, ao: AnalyzeObject): ...
+    def __init__(self, ao: AnalyzeObject):
+        """Initialize a new VM capable of running Dalvik Code"""
     def get_current_state(self) -> str:
         """Get a string representation of the current machine state."""
     def get_heap(self) -> str:
