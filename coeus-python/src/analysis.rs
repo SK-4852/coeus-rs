@@ -287,8 +287,9 @@ impl Instruction {
                     .collect::<Vec<_>>()
                     .join(","),
                 result
-                    .as_ref().map(|a| format!("{}", a))
-                    .unwrap_or_else(||"Void".to_string())
+                    .as_ref()
+                    .map(|a| format!("{}", a))
+                    .unwrap_or_else(|| "Void".to_string())
             )
         } else {
             format!("{:?}", self.instruction)
@@ -1327,6 +1328,51 @@ impl Class {
                 class: self.class.clone(),
             })
             .ok_or_else(|| PyRuntimeError::new_err("method not founud"))
+    }
+
+    pub fn get_field(&self, name: &str) -> PyResult<DexField> {
+        let class_data = if let Some(c_d) = self.class.class_data.as_ref() {
+            c_d
+        } else {
+            return Err(PyRuntimeError::new_err("field not found"));
+        };
+        class_data
+            .instance_fields
+            .iter()
+            .find(|a| {
+                let f = &self.file.fields[a.field_idx as usize];
+                f.name == name
+            })
+            .map(|a| DexField {
+                field: self.file.fields[a.field_idx as usize].clone(),
+                access_flags: Some(a.access_flags),
+                field_name: Some(self.file.fields[a.field_idx as usize].name.clone()),
+                file: self.file.clone(),
+                dex_class: self.clone(),
+            })
+            .ok_or_else(|| PyRuntimeError::new_err("field not found"))
+    }
+     pub fn get_static_field(&self, name: &str) -> PyResult<DexField> {
+        let class_data = if let Some(c_d) = self.class.class_data.as_ref() {
+            c_d
+        } else {
+            return Err(PyRuntimeError::new_err("field not found"));
+        };
+        class_data
+            .static_fields
+            .iter()
+            .find(|a| {
+                let f = &self.file.fields[a.field_idx as usize];
+                f.name == name
+            })
+            .map(|a| DexField {
+                field: self.file.fields[a.field_idx as usize].clone(),
+                access_flags: Some(a.access_flags),
+                field_name: Some(self.file.fields[a.field_idx as usize].name.clone()),
+                file: self.file.clone(),
+                dex_class: self.clone(),
+            })
+            .ok_or_else(|| PyRuntimeError::new_err("field not found"))
     }
 
     pub fn __getitem__(&self, name: &str) -> PyResult<Method> {
