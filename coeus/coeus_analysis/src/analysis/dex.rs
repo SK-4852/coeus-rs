@@ -205,13 +205,13 @@ pub fn find_cross_reference_array<'a: 'b, 'b>(
 fn find_references_to_string<'a: 'b, 'b>(
     str_idx: u32,
     dex_file: Arc<DexFile>,
-    multi_dex: &'a MultiDexFile,
+    _multi_dex: &'a MultiDexFile,
     place: &'b Context,
 ) -> Vec<Evidence> {
     let mut context_matches: Vec<Evidence> = vec![];
     let vec_loc = Arc::new(Mutex::new(&mut context_matches));
-    let classes = multi_dex.classes();
-    iterator!(classes).for_each(|(f, c)| {
+    let classes = &dex_file.classes;
+    iterator!(classes).for_each(|c| {
         let methods_containing_references: Vec<_> = iterator!(c.codes)
             .filter(|md| match md.code.as_ref() {
                 Some(code) => {
@@ -232,7 +232,7 @@ fn find_references_to_string<'a: 'b, 'b>(
             .map(|m| {
                 Evidence::CrossReference(CrossReferenceEvidence {
                     place: Location::DexMethod(m.method.method_idx as u32, dex_file.clone()),
-                    place_context: Context::DexMethod(m.method.clone(), f.clone()),
+                    place_context: Context::DexMethod(m.method.clone(), dex_file.clone()),
                     context: place.clone(),
                 })
             })
