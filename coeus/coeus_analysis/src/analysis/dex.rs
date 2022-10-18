@@ -433,7 +433,7 @@ fn find_references_to_field<'a: 'b, 'b>(
     let field_fqdn = format!(
         "{}->{}",
         dex_file
-            .get_type_name(field_idx.type_idx as usize)
+            .get_type_name(field_idx.class_idx as usize)
             .unwrap_or(""),
         field_idx.name
     );
@@ -492,7 +492,7 @@ fn find_references_to_field<'a: 'b, 'b>(
                                 let field = f.fields[*field_id as usize].clone();
                                 let fqdn = format!(
                                     "{}->{}",
-                                    f.get_type_name(field.type_idx as usize).unwrap_or(""),
+                                    f.get_type_name(field.class_idx as usize).unwrap_or(""),
                                     field.name
                                 );
                                 fqdn == field_fqdn
