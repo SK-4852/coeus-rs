@@ -88,12 +88,14 @@ impl<'a> MultiDexFile {
         entries.collect()
     }
     /// Return all pointers into the class pool.
-    pub fn types(&self) -> Vec<(Arc<DexFile>, u32)> {
+    pub fn types(&self) -> Vec<(Arc<DexFile>,usize, u32)> {
         let entries = iterator!(self.primary.types)
-            .map(|s| (self.primary.clone(), *s))
+            .enumerate()
+            .map(|(index,s)| (self.primary.clone(), index, *s))
             .chain(
                 iterator!(self.secondary)
-                    .flat_map(|d| iterator!(d.types).map(move |s| (d.clone(), *s))),
+
+                    .flat_map(|d| iterator!(d.types).enumerate().map(move |(index,s)| (d.clone(),index, *s))),
             );
 
         entries.collect()

@@ -795,16 +795,14 @@ impl Class {
         let class_name = self.class_name.clone();
         let (file, class) = if !self.codes.is_empty() && self.class_data.is_some() {
             (file, Arc::new(self.clone()))
+        } else if let Some((file, class)) = md
+            .classes()
+            .iter()
+            .find(|(_, class)| class.class_name == class_name && !class.codes.is_empty())
+        {
+            (file.clone(), class.clone())
         } else {
-            if let Some((file, class)) = md
-                .classes()
-                .iter()
-                .find(|(_, class)| class.class_name == class_name && !class.codes.is_empty())
-            {
-                (file.clone(), class.clone())
-            } else {
-                return "NO CLASS DEF FOUND".to_string();
-            }
+            return "NO CLASS DEF FOUND".to_string();
         };
         let mut lines = vec![];
         lines.push(format!(
