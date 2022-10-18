@@ -232,10 +232,10 @@ static MNEMONICS: [&str; 80] = [
     "if-lez",
     "if-gtz",
     "if-gez",
-    "iput-",
-    "iget-",
-    "sget-",
-    "sput-",
+    "iput",
+    "iget",
+    "sget",
+    "sput",
     "add-int/lit8",
     "add-int/lit16",
     "sub-int/lit8",
@@ -808,12 +808,12 @@ impl Instruction {
                     .fields
                     .get(field as usize)
                     .and_then(|f| match file.get_type_name(f.type_idx as usize) {
-                        Some("I") => Some("int"),
-                        Some("J") => Some("wide"),
-                        Some("Z") => Some("boolean"),
-                        Some("B") => Some("byte"),
-                        Some("C") => Some("char"),
-                        Some("S") => Some("short"),
+                        Some("I") => Some(""),
+                        Some("J") => Some("-wide"),
+                        Some("Z") => Some("-boolean"),
+                        Some("B") => Some("-byte"),
+                        Some("C") => Some("-char"),
+                        Some("S") => Some("-short"),
                         _ => None,
                     })
                     .unwrap_or("INVALID");
@@ -849,17 +849,18 @@ impl Instruction {
                     )))
                     .unwrap_or("".to_string())
             ),
-            &Instruction::InstanceGet(src, obj, field) => {
+            &Instruction::InstanceGet(src, obj, field) 
+            | &Instruction::InstanceGetBoolean (src, obj, field)=> {
                 let instruction_type = file
                     .fields
                     .get(field as usize)
                     .and_then(|f| match file.get_type_name(f.type_idx as usize) {
-                        Some("I") => Some("int"),
-                        Some("J") => Some("wide"),
-                        Some("Z") => Some("boolean"),
-                        Some("B") => Some("byte"),
-                        Some("C") => Some("char"),
-                        Some("S") => Some("short"),
+                        Some("I") => Some(""),
+                        Some("J") => Some("-wide"),
+                        Some("Z") => Some("-boolean"),
+                        Some("B") => Some("-byte"),
+                        Some("C") => Some("-char"),
+                        Some("S") => Some("-short"),
                         _ => None,
                     })
                     .unwrap_or("INVALID");
@@ -899,12 +900,12 @@ impl Instruction {
                     .fields
                     .get(field as usize)
                     .and_then(|f| match file.get_type_name(f.type_idx as usize) {
-                        Some("I") => Some("int"),
-                        Some("J") => Some("wide"),
-                        Some("Z") => Some("boolean"),
-                        Some("B") => Some("byte"),
-                        Some("C") => Some("char"),
-                        Some("S") => Some("short"),
+                        Some("I") => Some(""),
+                        Some("J") => Some("-wide"),
+                        Some("Z") => Some("-boolean"),
+                        Some("B") => Some("-byte"),
+                        Some("C") => Some("-char"),
+                        Some("S") => Some("-short"),
                         _ => None,
                     })
                     .unwrap_or("INVALID");
@@ -943,12 +944,12 @@ impl Instruction {
                     .fields
                     .get(field as usize)
                     .and_then(|f| match file.get_type_name(f.type_idx as usize) {
-                        Some("I") => Some("int"),
-                        Some("J") => Some("wide"),
-                        Some("Z") => Some("boolean"),
-                        Some("B") => Some("byte"),
-                        Some("C") => Some("char"),
-                        Some("S") => Some("short"),
+                        Some("I") => Some(""),
+                        Some("J") => Some("-wide"),
+                        Some("Z") => Some("-boolean"),
+                        Some("B") => Some("-byte"),
+                        Some("C") => Some("-char"),
+                        Some("S") => Some("-short"),
                         _ => None,
                     })
                     .unwrap_or("INVALID");
