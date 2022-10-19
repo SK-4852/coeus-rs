@@ -216,7 +216,7 @@ static MNEMONICS: [&str; 80] = [
     "move-object",
     "const/4",
     "const/16",
-    "const/32",
+    "const",
     "move-result-object",
     "array-length",
     "invoke-interface",
