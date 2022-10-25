@@ -7,6 +7,7 @@
 
 from tokenize import String
 from typing import Any, Optional
+from xmlrpc.client import boolean
 class Flow:
     def __init__(self, m: Method):
         """Construct a new static analysis flow"""
@@ -141,10 +142,10 @@ class Method:
         """Get a list of all argument types. This can be used as a helper function e.g. to build Frida scripts"""
     def get_return_type(self) -> str:
         """Get this methods return type"""
-    def find_all_branch_decisions(self, vm: DexVm) -> list[Branching]:
+    def find_all_branch_decisions(self, vm: DexVm, conservative: boolean) -> list[Branching]:
         """Return a list of all branch decisions and their branch registers. Can be used to perform some dead branch analysis for example. Currently, this is still experimental."""
     @staticmethod
-    def find_all_branch_decisions_array(methods: list[Method], vm:DexVm) -> list[Branching]:
+    def find_all_branch_decisions_array(methods: list[Method], vm:DexVm, conservative: boolean) -> list[Branching]:
         """"Same as `find_all_branch_decisions` but acting on an array of methods to use `rayon` for parallelization. Currently, this is non satisfactory as we have to clone the VM for each call (or lock the mutex)"""
     
 class Class:

@@ -115,13 +115,13 @@ impl FlowBranch {
 #[pymethods]
 impl Flow {
     #[new]
-    pub fn new(method: &crate::analysis::Method) -> PyResult<Self> {
+    pub fn new(method: &crate::analysis::Method, conservative: bool) -> PyResult<Self> {
         let code = if let Some(md) = method.method_data.as_ref().and_then(|a| a.code.as_ref()) {
             md
         } else {
             return Err(PyRuntimeError::new_err("Could not find method data"));
         };
-        let instruction_flow = InstructionFlow::new(code.clone(), method.file.clone());
+        let instruction_flow = InstructionFlow::new(code.clone(), method.file.clone(), conservative);
         Ok(Self {
             method: method.clone(),
             instruction_flow,
@@ -929,7 +929,7 @@ impl Method {
         proto.get_return_type(&self.file)
     }
     #[staticmethod]
-    pub fn find_all_branch_decisions_array(methods: &PyList, vm: &mut DexVm) -> Vec<Branching> {
+    pub fn find_all_branch_decisions_array(methods: &PyList, vm: &mut DexVm, conservative: bool) -> Vec<Branching> {
         let methods: Vec<Method> = methods
             .into_iter()
             .flat_map(|a| a.extract::<Method>().ok())
@@ -947,17 +947,17 @@ impl Method {
                 let mut dex_vm = DexVm {
                     vm: Arc::new(Mutex::new(m)),
                 };
-                a.find_all_branch_decisions(&mut dex_vm)
+                a.find_all_branch_decisions(&mut dex_vm, conservative)
             })
             .collect::<Vec<_>>();
         branchings
     }
 
-    pub fn find_all_branch_decisions(&self, vm: &mut DexVm) -> Vec<Branching> {
+    pub fn find_all_branch_decisions(&self, vm: &mut DexVm, conservative: bool) -> Vec<Branching> {
         let mut branchings = vec![];
         if let Some(code) = &self.method_data {
             if let Some(code) = &code.code {
-                let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone());
+                let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone(), conservative);
                 let branches = instruction_flow.get_all_branch_decisions();
                 for mut b in branches {
                     if b.state.tainted || b.state.loop_count.iter().any(|(_, value)| *value > 1) {
@@ -1041,7 +1041,7 @@ impl Method {
         let regex = Regex::new(signature).unwrap();
         if let Some(code) = &self.method_data {
             if let Some(code) = &code.code {
-                let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone());
+                let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone(), true);
                 let branches = instruction_flow
                     .find_all_calls_regex(&regex)
                     .iter()
@@ -1302,7 +1302,7 @@ impl Class {
                 if let Some(code) = &m.method_data {
                     if let Some(code) = &code.code {
                         let mut instruction_flow =
-                            InstructionFlow::new(code.clone(), self.file.clone());
+                            InstructionFlow::new(code.clone(), self.file.clone(), true);
                         let branches = instruction_flow
                             .find_all_calls_regex(&regex)
                             .iter()

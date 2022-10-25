@@ -391,6 +391,9 @@ impl VM {
 
     /// Returned MethodData is guaranteed to have an implementation
     pub fn lookup_method(&self, class_name: &str, method: &Method) -> Result<(Arc<DexFile>, &MethodData), VMException> {
+        if let Some(method_data) = self.dex_file.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &method.proto_name).map(|d|(self.dex_file.clone(),d)) {
+            return Ok(method_data);
+        }
          if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &method.proto_name).map(|d| (dex.clone(),d)))
             .collect::<Vec<(Arc<DexFile>,&MethodData)>>()

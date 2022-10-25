@@ -6,7 +6,7 @@
 
 use std::{
     collections::HashMap,
-    fmt::{Display},
+    fmt::Display,
     ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Mul, Rem, Shl, Shr, Sub},
     sync::Arc,
 };
@@ -314,7 +314,7 @@ impl Display for Value {
                     .collect::<Vec<_>>()
                     .join(",")
             )),
-            Value::Variable(v) => {f.write_str(&v.to_string())}
+            Value::Variable(v) => f.write_str(&v.to_string()),
             Value::Unknown { ty } => f.write_str(&format!("Unknown{{ ty={} }}", ty)),
             Value::Object { ty } => f.write_str(&format!("Object{{ ty={} }}", ty)),
             Value::Invalid => f.write_str("INVALID"),
@@ -784,7 +784,7 @@ impl InstructionFlow {
         self.already_branched.clear();
         self.new_branch(InstructionOffset(start));
     }
-    pub fn new(method: CodeItem, dex: Arc<DexFile>) -> Self {
+    pub fn new(method: CodeItem, dex: Arc<DexFile>, conservative: bool) -> Self {
         let register_size = method.register_size;
         let method: HashMap<_, _> = method
             .insns
@@ -798,7 +798,7 @@ impl InstructionFlow {
             dex,
             register_size,
             already_branched: vec![],
-            conservative: true,
+            conservative,
         }
     }
 
@@ -940,7 +940,9 @@ impl InstructionFlow {
                             continue;
                         }
                     } else {
-                        b.state.tainted = true;
+                        if self.conservative {
+                            b.state.tainted = true;
+                        }
                         let mut new_branch = b.clone();
                         new_branch.pc += offset as i32;
                         new_branch.state.loop_count = HashMap::new();
@@ -974,7 +976,9 @@ impl InstructionFlow {
                             continue;
                         }
                     } else {
-                        b.state.tainted = true;
+                        if self.conservative {
+                            b.state.tainted = true;
+                        }
                         let mut new_branch = b.clone();
                         new_branch.pc += offset as i32;
                         new_branch.state.loop_count = HashMap::new();
@@ -1147,11 +1151,93 @@ impl InstructionFlow {
                 Instruction::Invoke(_) => {}
                 Instruction::InvokeType(_) => {}
 
+                Instruction::InvokeInterface(_, method, ref regs) => {
+                    let m = &self.dex.methods[method as usize];
+                    let proto = &self.dex.protos[m.proto_idx as usize];
+
+                    let sig = proto.to_string(&self.dex);
+                    let return_type = proto.get_return_type(&self.dex);
+                    let class_name = self.dex.get_type_name(m.class_idx).unwrap_or_default();
+                    let class = self
+                        .dex
+                        .get_class_by_type_name_idx(m.class_idx)
+                        .unwrap_or(Arc::new(Class {
+                            class_name: class_name.to_string(),
+                            class_idx: m.class_idx as u32,
+                            ..Default::default()
+                        }))
+                        .clone();
+                    let impls = self.dex.get_implementations_for(&class);
+                    let mut args = regs
+                        .iter()
+                        .map(|a| b.state.registers[*a as usize].clone())
+                        .collect::<Vec<_>>();
+                    if impls.len() == 1 {
+                        let (_f, new_class) = &impls[0];
+                        args[0] = Value::Object {
+                            ty: new_class.class_name.clone(),
+                        };
+                        for v in &new_class.codes {
+                            if v.method.method_name == m.method_name {
+                                let function_call = LastInstruction::FunctionCall {
+                                    name: v.method.method_name.clone(),
+                                    method: v.method.clone(),
+                                    class_name: new_class.class_name.to_string(),
+                                    class: new_class.clone(),
+                                    signature: format!(
+                                        "{}->{}{}",
+                                        new_class.class_name, m.method_name, sig
+                                    ),
+                                    args: args.clone(),
+                                    result: if return_type == "V" {
+                                        None
+                                    } else {
+                                        Some(Value::Object {
+                                            ty: return_type.clone(),
+                                        })
+                                    },
+                                };
+                                b.state.last_instruction = Some(function_call);
+                            }
+                        }
+                        if b.state.last_instruction.is_none() {
+                            let function_call = LastInstruction::FunctionCall {
+                                name: m.method_name.clone(),
+                                method: m.clone(),
+                                class_name: class_name.to_string(),
+                                class,
+                                signature: format!("{}->{}{}", class_name, m.method_name, sig),
+                                args,
+                                result: if return_type == "V" {
+                                    None
+                                } else {
+                                    Some(Value::Object { ty: return_type })
+                                },
+                            };
+                            b.state.last_instruction = Some(function_call);
+                        }
+                    } else {
+                        let function_call = LastInstruction::FunctionCall {
+                            name: m.method_name.clone(),
+                            method: m.clone(),
+                            class_name: class_name.to_string(),
+                            class,
+                            signature: format!("{}->{}{}", class_name, m.method_name, sig),
+                            args,
+                            result: if return_type == "V" {
+                                None
+                            } else {
+                                Some(Value::Object { ty: return_type })
+                            },
+                        };
+                        b.state.last_instruction = Some(function_call);
+                    }
+                }
+
                 Instruction::InvokeVirtual(_, method, ref regs)
                 | Instruction::InvokeSuper(_, method, ref regs)
                 | Instruction::InvokeDirect(_, method, ref regs)
-                | Instruction::InvokeStatic(_, method, ref regs)
-                | Instruction::InvokeInterface(_, method, ref regs) => {
+                | Instruction::InvokeStatic(_, method, ref regs) => {
                     let m = &self.dex.methods[method as usize];
                     let proto = &self.dex.protos[m.proto_idx as usize];
 
@@ -1461,7 +1547,9 @@ impl InstructionFlow {
                 Instruction::Nop => {}
             }
             // reset last_function if this is not a function call
+            // and we are not in an move-result-object
             if !is_function_call(&instruction.1)
+                && !is_move_result(&instruction.1)
                 && matches!(
                     b.state.last_instruction,
                     Some(LastInstruction::FunctionCall { .. })
@@ -1518,6 +1606,14 @@ impl InstructionFlow {
     }
 }
 
+fn is_move_result(instruction: &Instruction) -> bool {
+    matches!(
+        instruction,
+        Instruction::MoveResult(..)
+            | Instruction::MoveResultObject(..)
+            | Instruction::MoveResultWide(..)
+    )
+}
 fn is_function_call(instruction: &Instruction) -> bool {
     matches!(
         instruction,
