@@ -262,6 +262,7 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
+
     /// Get all classes
     #[pyo3(text_signature = "($self)")]
     pub fn get_classes(&self) -> PyResult<Vec<crate::analysis::Evidence>> {

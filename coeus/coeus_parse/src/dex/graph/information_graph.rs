@@ -11,11 +11,11 @@ use coeus_emulation::vm::{
 use coeus_macros::iterator;
 use coeus_models::models::{
     AccessFlags, BinaryObject, Instruction, InstructionOffset, InstructionSize, MultiDexFile,
-    ValueType,
+    ValueType, Class,
 };
 use petgraph::{
     graph::{DiGraph, NodeIndex},
-    Graph,
+    Graph, Direction,
 };
 use rayon::iter::ParallelIterator;
 use std::{
@@ -37,6 +37,25 @@ use super::{
     ChangeSet, InfoNode, Supergraph,
 };
 
+
+/// Find implementations of interfaces
+pub fn find_implementations(
+    super_graph: &Supergraph,
+    interface_identifier: &str,
+) -> Vec<Arc<Class>> {
+    let mut classes = vec![];
+    if let Some(node) = super_graph.class_node_mapping.get(interface_identifier) {
+        let nodes = super_graph
+            .super_graph
+            .neighbors_directed(*node, Direction::Outgoing);
+        for n in nodes {
+            if let Some(InfoNode::ClassNode(c)) = super_graph.super_graph.node_weight(n) {
+                classes.push(c.clone());
+            }
+        }
+    }
+    classes
+}
 
 
 /// Build the super graph containing nodes from various pools and

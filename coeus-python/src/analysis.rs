@@ -1252,6 +1252,22 @@ impl Class {
     pub fn __richcmp__(&self, other: &Class, _op: pyo3::basic::CompareOp) -> bool {
         self.name() == other.name()
     }
+    pub fn find_implementations(&self, ao: &AnalyzeObject) -> Vec<Class> {
+        if let Some((md, _)) = ao
+            .files
+            .get_multi_dex_from_dex_identifier(&self.file.identifier)
+        {
+            let impls = md.get_implementations_for(&self.class);
+            return impls
+                .iter()
+                .map(|(f, c)| Class {
+                    class: c.clone(),
+                    file: f.clone(),
+                })
+                .collect();
+        }
+        vec![]
+    }
     /// Return the name of the class
     pub fn name(&self) -> &str {
         &self.class.class_name
@@ -1352,7 +1368,7 @@ impl Class {
             })
             .ok_or_else(|| PyRuntimeError::new_err("field not found"))
     }
-     pub fn get_static_field(&self, name: &str) -> PyResult<DexField> {
+    pub fn get_static_field(&self, name: &str) -> PyResult<DexField> {
         let class_data = if let Some(c_d) = self.class.class_data.as_ref() {
             c_d
         } else {

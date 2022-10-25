@@ -1,11 +1,11 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use coeus_macros::iterator;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
@@ -30,6 +30,7 @@ pub struct DexFile {
     pub fields: Vec<Arc<Field>>,
     #[serde(skip_serializing)]
     pub classes: Vec<Arc<Class>>,
+    pub virtual_table: HashMap<String, Vec<Arc<Class>>>,
 }
 
 impl PartialEq for DexFile {
@@ -43,6 +44,16 @@ impl DexFile {
         &self.identifier
     }
 
+    pub fn get_implementations_for(&self, class: &Class) -> Vec<(Arc<DexFile>, Arc<Class>)> {
+        let self_clone = Arc::new(self.clone());
+        if let Some(impls) = self.virtual_table.get(&class.class_name) {
+            return impls
+                .iter()
+                .map(|c| (self_clone.clone(), c.clone()))
+                .collect();
+        }
+        vec![]
+    }
     pub fn get_string<T>(&self, string_idx: T) -> Option<&str>
     where
         T: Into<usize>,

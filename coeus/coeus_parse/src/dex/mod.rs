@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -8,6 +8,8 @@
 pub mod graph;
 
 use std::{
+    collections::HashMap,
+    hash::Hash,
     io::{Cursor, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
     vec,
@@ -104,9 +106,10 @@ pub fn parse_dex_buf(
 
     let mut ret_classes = Vec::with_capacity(classes.len());
     let vec_lock = Arc::new(Mutex::new(&mut ret_classes));
-
+    let v_table = Mutex::new(HashMap::new());
     iterator!(classes).for_each(|class| {
         //class is not here, but still link it (e.g. sdk stuff)
+
         if class.class_data_off < config.data_off {
             let the_class = Arc::new(Class {
                 dex_identifier: format!("{:02x?}", config.signature),
@@ -125,8 +128,15 @@ pub fn parse_dex_buf(
                 interfaces: vec![],
             });
             if let Ok(mut ret_classes) = vec_lock.lock() {
-                ret_classes.push(the_class);
+                ret_classes.push(the_class.clone());
             };
+            if let Some(flags) = AccessFlags::from_bits(class.access_flags as u64) {
+                if flags.contains(AccessFlags::INTERFACE) {
+                    if let Ok(mut table_lock) = v_table.lock() {
+                        table_lock.insert(the_class.class_name.clone(), vec![]);
+                    }
+                }
+            }
             return;
         }
         let vec_lock = Arc::clone(&vec_lock);
@@ -249,11 +259,23 @@ pub fn parse_dex_buf(
                 code: Some(code),
             });
         }
+        let the_class = Arc::new(the_class);
+        if let Ok(mut v_table) = v_table.lock() {
+            for &type_idx in &the_class.interfaces {
+                if let Some(iface_name) =
+                    get_string_from_idx(types[type_idx as usize] as u16, &strings)
+                {
+                    let entry = v_table.entry(iface_name).or_default();
+
+                    entry.push(the_class.clone());
+                }
+            }
+        }
         if let Ok(mut ret_classes) = vec_lock.lock() {
-            ret_classes.push(Arc::new(the_class));
+            ret_classes.push(the_class);
         };
     });
-
+    let v_table = v_table.into_inner().unwrap();
     Some(DexFile {
         identifier: format!("{:02x?}", config.signature),
         file_name: file_name.to_string(),
@@ -264,6 +286,7 @@ pub fn parse_dex_buf(
         methods,
         fields,
         classes: ret_classes,
+        virtual_table: v_table,
     })
 }
 

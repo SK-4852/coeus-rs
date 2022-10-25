@@ -50,6 +50,14 @@ impl<'a> MultiDexFile {
         }
     }
 
+    pub fn get_implementations_for(&self, class: &Class) -> Vec<(Arc<DexFile>,Arc<Class>)> {
+        let mut impls = self.primary.get_implementations_for(class);
+        for s in &self.secondary {
+            impls.extend(s.get_implementations_for(class));
+        }
+        impls
+    }
+
     pub fn dex_file_from_identifier(&self, identifier: &str) -> Option<Arc<DexFile>> {
         if self.primary.identifier == identifier {
             Some(self.primary.clone())
@@ -88,19 +96,19 @@ impl<'a> MultiDexFile {
         entries.collect()
     }
     /// Return all pointers into the class pool.
-    pub fn types(&self) -> Vec<(Arc<DexFile>,usize, u32)> {
+    pub fn types(&self) -> Vec<(Arc<DexFile>, usize, u32)> {
         let entries = iterator!(self.primary.types)
             .enumerate()
-            .map(|(index,s)| (self.primary.clone(), index, *s))
-            .chain(
-                iterator!(self.secondary)
-
-                    .flat_map(|d| iterator!(d.types).enumerate().map(move |(index,s)| (d.clone(),index, *s))),
-            );
+            .map(|(index, s)| (self.primary.clone(), index, *s))
+            .chain(iterator!(self.secondary).flat_map(|d| {
+                iterator!(d.types)
+                    .enumerate()
+                    .map(move |(index, s)| (d.clone(), index, *s))
+            }));
 
         entries.collect()
     }
-    /// Returns all pointers into the class pool, as well as the pointer into the type pool of 
+    /// Returns all pointers into the class pool, as well as the pointer into the type pool of
     /// the respective dex file.
     pub fn types_enumerated(&self) -> Vec<(usize, Arc<DexFile>, &u32)> {
         let entries = iterator!(self.primary.types)
@@ -114,15 +122,17 @@ impl<'a> MultiDexFile {
 
         entries.collect()
     }
-    /// Return all proto type references for direct use as well as a pointer 
+    /// Return all proto type references for direct use as well as a pointer
     /// into the proto table of the respective dex file.
     pub fn protos(&'a self) -> Vec<(Arc<DexFile>, Arc<Proto>, usize)> {
-        let entries = iterator!(self.primary.protos).enumerate()
+        let entries = iterator!(self.primary.protos)
+            .enumerate()
             .map(|(index, s)| (self.primary.clone(), s.clone(), index))
-            .chain(
-                iterator!(self.secondary)
-                    .flat_map(|d| iterator!(d.protos).enumerate().map(move |(index, s)| (d.clone(), s.clone(), index))),
-            );
+            .chain(iterator!(self.secondary).flat_map(|d| {
+                iterator!(d.protos)
+                    .enumerate()
+                    .map(move |(index, s)| (d.clone(), s.clone(), index))
+            }));
 
         entries.collect()
     }
@@ -130,12 +140,14 @@ impl<'a> MultiDexFile {
     /// Return all fields found split accross the various dex files and return it for direct use
     /// as well as a pointer into the field pool of the respective dex file.
     pub fn fields(&self) -> Vec<(Arc<DexFile>, Arc<Field>, usize)> {
-        let entries = iterator!(self.primary.fields).enumerate()
+        let entries = iterator!(self.primary.fields)
+            .enumerate()
             .map(|(index, s)| (self.primary.clone(), s.clone(), index))
-            .chain(
-                iterator!(self.secondary)
-                    .flat_map(|d| iterator!(d.fields).enumerate().map(move |(index, s)| (d.clone(), s.clone(), index))),
-            );
+            .chain(iterator!(self.secondary).flat_map(|d| {
+                iterator!(d.fields)
+                    .enumerate()
+                    .map(move |(index, s)| (d.clone(), s.clone(), index))
+            }));
         entries.collect()
     }
 
