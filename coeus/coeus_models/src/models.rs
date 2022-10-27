@@ -387,7 +387,7 @@ impl EncodedItem {
         };
         let mut bytes = [0u8; 4];
         let mut handle = self.values.take(4);
-        handle.read_exact(&mut bytes).expect("Cannot read field_id");
+        handle.read(&mut bytes).expect("Cannot read field_id");
         u32::from_le_bytes(bytes)
     }
     pub fn get_string_id(&self) -> u32 {
@@ -396,7 +396,7 @@ impl EncodedItem {
         };
         let mut bytes = [0u8; 4];
         let mut handle = self.values.take(4);
-        handle.read_exact(&mut bytes).expect("Cannot read field_id");
+        handle.read(&mut bytes).expect("Cannot read field_id");
         u32::from_le_bytes(bytes)
     }
     pub fn try_get_value<T: TryFrom<EncodedItem>>(&self) -> Option<T> {
@@ -532,6 +532,9 @@ macro_rules! impl_value_type {
     };
 }
 
+// TODO: We need to figure out if the read does what we actually want. The documentation suggests to sign extend the values,
+// which we are currently completly ignoring.
+
 impl_value_type!(EncodedArray, ValueType::Array, |e| { e.inner.unwrap() });
 
 impl_value_type!(bool, ValueType::Boolean, |e| { e.value_arg == 1 });
@@ -543,21 +546,21 @@ impl_value_type!(char, ValueType::Char, |e| { e.values[0] as char });
 impl_value_type!(u16, ValueType::Short, |e| {
     let mut bytes = [0u8; 2];
     let mut handle = e.values.take(2);
-    handle.read_exact(&mut bytes).expect("Cannot Read");
+    handle.read(&mut bytes).expect("Cannot Read");
     u16::from_le_bytes(bytes)
 });
 
 impl_value_type!(u32, ValueType::Int, |e| {
     let mut bytes = [0u8; 4];
     let mut handle = e.values.take(4);
-    handle.read_exact(&mut bytes).expect("Cannot read");
+    handle.read(&mut bytes).expect("Cannot read");
     u32::from_le_bytes(bytes)
 });
 
 impl_value_type!(u64, ValueType::Long, |e| {
     let mut bytes = [0u8; 8];
     let mut handle = e.values.take(8);
-    handle.read_exact(&mut bytes).expect("Cannot read");
+    handle.read(&mut bytes).expect("Cannot read");
     u64::from_le_bytes(bytes)
 });
 
