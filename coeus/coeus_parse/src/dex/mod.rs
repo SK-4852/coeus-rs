@@ -9,7 +9,6 @@ pub mod graph;
 
 use std::{
     collections::HashMap,
-    hash::Hash,
     io::{Cursor, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
     vec,
