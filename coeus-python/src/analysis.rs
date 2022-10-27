@@ -986,6 +986,7 @@ impl Method {
                         {
                             val
                         } else {
+                            b.state.tainted = true;
                             b.state.registers[u8::from(left) as usize].clone()
                         };
                         let right = if let Ok(val) =
@@ -993,6 +994,7 @@ impl Method {
                         {
                             val
                         } else {
+                            b.state.tainted = true;
                             b.state.registers[u8::from(right) as usize].clone()
                         };
 
@@ -1017,6 +1019,7 @@ impl Method {
                         {
                             val
                         } else {
+                            b.state.tainted = true;
                             b.state.registers[left as usize].clone()
                         };
 

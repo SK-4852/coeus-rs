@@ -30,6 +30,7 @@ pub struct InstructionFlow {
 }
 #[derive(Clone, Debug)]
 pub struct Branch {
+    pub parent_id: Option<u64>,
     pub id: u64,
     pub pc: InstructionOffset,
     pub state: State,
@@ -38,6 +39,7 @@ pub struct Branch {
 impl Default for Branch {
     fn default() -> Self {
         Self {
+            parent_id: None,
             id: rand::random(),
             pc: InstructionOffset(0),
             previous_pc: InstructionOffset(0),
@@ -782,7 +784,7 @@ impl InstructionFlow {
     pub fn reset(&mut self, start: u32) {
         self.branches.clear();
         self.already_branched.clear();
-        self.new_branch(InstructionOffset(start));
+        self.new_branch(InstructionOffset(start), None);
     }
     pub fn new(method: CodeItem, dex: Arc<DexFile>, conservative: bool) -> Self {
         let register_size = method.register_size;
@@ -804,7 +806,7 @@ impl InstructionFlow {
 
     pub fn get_all_branch_decisions(&mut self) -> Vec<Branch> {
         if self.branches.is_empty() {
-            self.new_branch(InstructionOffset(0));
+            self.new_branch(InstructionOffset(0), None);
         }
         let mut branches = vec![];
         let mut iterations = 0;
@@ -851,7 +853,7 @@ impl InstructionFlow {
     pub fn find_all_calls_with_op<F: Fn(&str) -> bool>(&mut self, op: F) -> Vec<Branch> {
         let mut branches = vec![];
         let mut iterations = 0;
-        self.new_branch(InstructionOffset(0));
+        self.new_branch(InstructionOffset(0), None);
         loop {
             self.next_instruction();
             for state in self.get_all_states() {
@@ -919,9 +921,15 @@ impl InstructionFlow {
                         .any(|(_, offset)| offset == &b.pc)
                     {
                         branches_to_taint.push(b.id);
+                        for b in self.already_branched.iter()
+                        // .filter(|(_, offset)| offset == &b.pc)
+                        {
+                            branches_to_taint.push(b.0);
+                        }
                         continue;
                     }
                     b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
+                    self.already_branched.push((b.id, b.pc));
                     if let (Some(left), Some(right)) = (
                         b.state.registers[u8::from(left) as usize].try_get_number(),
                         b.state.registers[u8::from(right) as usize].try_get_number(),
@@ -940,14 +948,17 @@ impl InstructionFlow {
                             continue;
                         }
                     } else {
-                        if self.conservative {
+                        if self.conservative
+                            || matches!(b.state.registers[u8::from(left) as usize], Value::Empty)
+                            || matches!(b.state.registers[u8::from(right) as usize], Value::Empty)
+                        {
                             b.state.tainted = true;
                         }
                         let mut new_branch = b.clone();
+                        new_branch.parent_id = Some(b.id);
                         new_branch.pc += offset as i32;
                         new_branch.state.loop_count = HashMap::new();
                         branches_to_add.push((b.pc, new_branch));
-                        self.already_branched.push((b.id, b.pc));
                     }
                 }
                 Instruction::TestZero(test, left, offset) => {
@@ -957,9 +968,15 @@ impl InstructionFlow {
                         .any(|(_, offset)| offset == &b.pc)
                     {
                         branches_to_taint.push(b.id);
+                        for b in self.already_branched.iter()
+                        // .filter(|(_, offset)| offset == &b.pc)
+                        {
+                            branches_to_taint.push(b.0);
+                        }
                         continue;
                     }
                     b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
+                    self.already_branched.push((b.id, b.pc));
                     if let Some(left) = b.state.registers[u8::from(left) as usize].try_get_number()
                     {
                         log::warn!("DEAD BRANCH");
@@ -976,14 +993,16 @@ impl InstructionFlow {
                             continue;
                         }
                     } else {
-                        if self.conservative {
+                        if self.conservative
+                            || matches!(b.state.registers[u8::from(left) as usize], Value::Empty)
+                        {
                             b.state.tainted = true;
                         }
                         let mut new_branch = b.clone();
                         new_branch.pc += offset as i32;
+                        new_branch.parent_id = Some(b.id);
                         new_branch.state.loop_count = HashMap::new();
                         branches_to_add.push((b.pc, new_branch));
-                        self.already_branched.push((b.id, b.pc));
                     }
                 }
                 Instruction::Switch(_, table_offset) => {
@@ -999,6 +1018,7 @@ impl InstructionFlow {
                                 continue;
                             }
                             let mut new_branch = b.clone();
+                            new_branch.parent_id = Some(b.id);
                             new_branch.pc += *offset as i32;
                             branches_to_add.push((b.pc, new_branch));
                         }
@@ -1535,11 +1555,9 @@ impl InstructionFlow {
 
                 // We don't need those
                 Instruction::NotImpl(_, _) => {
-                    if self.conservative {
-                        branches_to_taint.push(b.id);
-                        for reg in &mut b.state.registers {
-                            *reg = Value::Empty;
-                        }
+                    branches_to_taint.push(b.id);
+                    for reg in &mut b.state.registers {
+                        *reg = Value::Empty;
                     }
                 }
                 Instruction::ArrayData(_, _) => {}
@@ -1564,7 +1582,10 @@ impl InstructionFlow {
         for b_to_taint in branches_to_taint {
             self.branches
                 .iter_mut()
-                .filter(|b| b.id == b_to_taint)
+                .filter(|b| {
+                    b.id == b_to_taint
+                        || (b.parent_id.is_some() && b.parent_id.unwrap() == b_to_taint)
+                })
                 .for_each(|b| b.state.tainted = true);
         }
         if self.branches.len() < 1000 {
@@ -1574,8 +1595,9 @@ impl InstructionFlow {
             }
         }
     }
-    fn new_branch(&mut self, pc: InstructionOffset) {
+    fn new_branch(&mut self, pc: InstructionOffset, parent_id: Option<u64>) {
         self.branches.push(Branch {
+            parent_id,
             id: rand::random(),
             pc,
             previous_pc: pc,
