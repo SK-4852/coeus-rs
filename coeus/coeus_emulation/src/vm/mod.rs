@@ -197,6 +197,7 @@ pub enum VMException {
     LinkerError,
     StaticDataNotFound(u32),
     Breakpoint(InstructionOffset, u32, BreakpointContext),
+    ExceptionThrown
 }
 #[derive(Debug, Copy, Clone)]
 pub enum BreakpointContext {
@@ -293,6 +294,10 @@ impl VM {
     pub fn continue_execution(&mut self, start_address: InstructionOffset) -> Result<(), VMException> {
         self.skip_next_breakpoint = true;
         self.execute(start_address)
+    }
+    pub fn skip_over(&mut self) -> Result<(), VMException> {
+        self.current_state.pc += self.current_state.current_instruction_size;
+        self.execute(self.current_state.pc)
     }
     pub fn reset(&mut self) {
         self.current_state.pc = 0.into();
@@ -586,7 +591,9 @@ impl VM {
                 // for now we just ignore checkcasts
                 Instruction::CheckCast(..) => {}
                 Instruction::SwitchData(_) => {}
-                Instruction::Throw(_) => {}
+                Instruction::Throw(_) => {
+                    return Err(VMException::ExceptionThrown);
+                }
                 Instruction::Nop => {}
                 &Instruction::Move(dst, src) => {
                     let src_reg: u8 = src.into();
@@ -618,9 +625,15 @@ impl VM {
                         .to_owned();
                     self.update_register(dst_reg as usize, src)?;
                 }
-                Instruction::MoveWide(_, _) => {}
-                Instruction::MoveWideFrom16(_, _) => {}
-                Instruction::MoveWide16(_, _) => {}
+                Instruction::MoveWide(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::MoveWideFrom16(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::MoveWide16(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::MoveObject(dst_reg, src_reg) => {
                     let src_reg: u8 = src_reg.into();
@@ -656,14 +669,18 @@ impl VM {
                     let b: u8 = b.into();
                     self.binary_op(dst, dst, b, |a, b| Ok(a ^ b))?;
                 }
-                &Instruction::XorLong(_, _) => {}
+                &Instruction::XorLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::XorIntDst(dst, a, b) => {
                     self.binary_op(dst, a, b, |a, b| Ok(a ^ b))?;
                 }
                 &Instruction::XorIntDstLit8(dst, a, lit) => {
                     self.binary_op_lit(dst, a, lit, |a, b| a ^ b)?;
                 }
-                &Instruction::XorLongDst(_, _, _) => {}
+                &Instruction::XorLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::XorIntDstLit16(dst, a, lit) => {
                     let dst: u8 = dst.into();
@@ -678,7 +695,9 @@ impl VM {
                         Ok(a % b)
                     })?;
                 }
-                &Instruction::RemLongDst(_, _, _) => {}
+                &Instruction::RemLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::RemInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
                     let b: u8 = b.into();
@@ -690,7 +709,9 @@ impl VM {
                         Ok(a % b)
                     })?;
                 }
-                &Instruction::RemLong(_, _) => {}
+                &Instruction::RemLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::RemIntLit16(dst, a, lit) => {
                     let dst: u8 = dst.into();
                     let a: u8 = a.into();
@@ -715,8 +736,12 @@ impl VM {
                     let a: u16 = a.into();
                     self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_add(b) )?;
                 }
-                Instruction::AddLong(_, _) => {}
-                Instruction::AddLongDst(_, _, _) => {}
+                Instruction::AddLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::AddLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::MulInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
@@ -734,8 +759,12 @@ impl VM {
                     let a: u16 = a.into();
                     self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_mul(b))?;
                 }
-                Instruction::MulLong(_, _) => {}
-                Instruction::MulLongDst(_, _, _) => {}
+                Instruction::MulLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::MulLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::SubInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
@@ -753,8 +782,12 @@ impl VM {
                     let a: u16 = a.into();
                     self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_sub(b))?;
                 }
-                Instruction::SubLong(_, _) => {}
-                Instruction::SubLongDst(_, _, _) => {}
+                Instruction::SubLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::SubLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::AndInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
@@ -772,8 +805,12 @@ impl VM {
                     let a: u16 = a.into();
                     self.binary_op_lit(dst, a, lit, |a, b| a & b)?;
                 }
-                Instruction::AndLong(_, _) => {}
-                Instruction::AndLongDst(_, _, _) => {}
+                Instruction::AndLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::AndLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::OrInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
@@ -791,8 +828,12 @@ impl VM {
                     let a: u16 = a.into();
                     self.binary_op_lit(dst, a, lit, |a, b| a | b)?;
                 }
-                Instruction::OrLong(_, _) => {}
-                Instruction::OrLongDst(_, _, _) => {}
+                Instruction::OrLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::OrLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::Test(test, a, b, offset) => {
                     let a: u8 = a.into();
@@ -1011,15 +1052,20 @@ impl VM {
                         return Err(VMException::RegisterNotFound(array_reference as usize));
                     }
                 }
-                Instruction::Invoke(_) => {}
+                Instruction::Invoke(_) => {
+                    return Err(VMException::LinkerError);
+                }
                 Instruction::InvokeType(a) => {
                     log::debug!("Invoke {}", a);
+                    return Err(VMException::LinkerError);
                 }
                 &Instruction::MoveResult(dst) => {
                     self.update_register(dst as usize, self.current_state.return_reg.clone())?;
                     self.current_state.return_reg = Register::Empty;
                 }
-                Instruction::MoveResultWide(_) => {}
+                Instruction::MoveResultWide(_) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::MoveResultObject(dst) => {
                     self.update_register(dst as usize, self.current_state.return_reg.clone())?;
                     self.current_state.return_reg = Register::Empty;
@@ -1094,7 +1140,9 @@ impl VM {
                         return Ok(());
                     }
                 }
-                Instruction::Const => {}
+                Instruction::Const => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::ConstLit4(dst, lit) => {
                     let lit: i8 = lit.into();
                     let dst: u8 = dst.into();
@@ -1109,7 +1157,9 @@ impl VM {
                     let new_register = Register::Literal(lit);
                     self.update_register(dst, new_register)?;
                 }
-                Instruction::ConstWide => {}
+                Instruction::ConstWide => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::ConstString(dst, reference) => {
                     let const_str =  self.current_state.current_dex_file.get_string(reference).ok_or(VMException::StaticDataNotFound(reference as u32))?.to_string();
                    
@@ -1120,8 +1170,12 @@ impl VM {
                     self.update_register(dst, new_register)?;
                     
                 }
-                Instruction::ConstStringJumbo(_, _) => {}
-                Instruction::ConstClass(_, _) => {}
+                Instruction::ConstStringJumbo(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::ConstClass(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::IntToByte(dst, src) | &Instruction::IntToChar(dst, src) => {
                     let dst: u8 = dst.into();
                     let src: u8 = src.into();
@@ -1171,7 +1225,9 @@ impl VM {
                         return Err(VMException::OutOfMemory);
                     }
                 }
-                Instruction::NewInstanceType(_) => {}
+                Instruction::NewInstanceType(_) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::NewArray(dst, size, ty) => {
                     let size: u8 = size.into();
                     let dst: u8 = dst.into();
@@ -1211,7 +1267,9 @@ impl VM {
                         return Err(VMException::OutOfMemory);
                     }
                 }
-                Instruction::FilledNewArrayRange(_, _, _) => {}
+                Instruction::FilledNewArrayRange(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::FillArrayData(reference, data) => {
                     if let Some(Register::Reference(_, reference)) = self
                         .current_state
@@ -1234,9 +1292,15 @@ impl VM {
                 //TODO: implement ranged opcodes
                 Instruction::InvokeSuperRange(..)
                 | Instruction::InvokeVirtualRange(..)
-                | Instruction::InvokeDirectRange(..) => {}
-                Instruction::InvokeStaticRange(..) => {}
-                Instruction::InvokeInterfaceRange(..) => {}
+                | Instruction::InvokeDirectRange(..) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::InvokeStaticRange(..) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::InvokeInterfaceRange(..) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 Instruction::InvokeSuper(_, _, _) => {}
                 Instruction::InvokeVirtual(_, method_ref, argument_registers)
@@ -1521,13 +1585,21 @@ impl VM {
                         }
                     }
                 }
-                Instruction::InvokeInterface(_, _, _) => {}
+                Instruction::InvokeInterface(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
-                Instruction::NotImpl(_, _) => {}
+                Instruction::NotImpl(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 Instruction::ArrayData(_, _) => {}
 
-                Instruction::StaticGet(_, _) => {}
-                Instruction::StaticGetWide(_, _) => {}
+                Instruction::StaticGet(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::StaticGetWide(_, _) => {
+                     return Err(VMException::LinkerError);
+                }
                 &Instruction::StaticGetObject(dst, field_idx) => {
                     let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {
                         return Err(VMException::ClassNotFound(0));
@@ -1788,6 +1860,8 @@ impl VM {
                                     .clone();
                                 if let Value::Int(val) = val {
                                     self.update_register(dst, Register::Literal(val))?;
+                                } else {
+                                     return Err(VMException::InvalidRegisterType);
                                 }
                             } else {
                                 log::debug!(
@@ -1797,11 +1871,16 @@ impl VM {
                                     )
                                 );
                                 self.update_register(dst, Register::Literal(0))?;
+                                return Err(VMException::InvalidRegisterType);
                             }
                         }
+                    } else {
+                        return Err(VMException::InvalidRegisterType);
                     }
                 }
-                Instruction::InstanceGetWide(_, _, _) => {}
+                Instruction::InstanceGetWide(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
                 &Instruction::InstanceGetObject(dst, instance, field_id) => {
                     let dst: u8 = dst.into();
                     let instance: u8 = instance.into();
@@ -1828,14 +1907,28 @@ impl VM {
                                     *field_instance,
                                 );
                                 self.update_register(dst, new_register)?;
+                            } else { 
+                                 return Err(VMException::InvalidRegisterType); 
                             }
+                        } else {
+                            return Err(VMException::InvalidRegisterType);
                         }
+                    } else {
+                        return Err(VMException::InvalidRegisterType);
                     }
                 }
-                Instruction::InstanceGetBoolean(_, _, _) => {}
-                Instruction::InstanceGetByte(_, _, _) => {}
-                Instruction::InstanceGetChar(_, _, _) => {}
-                Instruction::InstanceGetShort(_, _, _) => {}
+                Instruction::InstanceGetBoolean(_, _, _) => {
+                     return Err(VMException::LinkerError);
+                }
+                Instruction::InstanceGetByte(_, _, _) => {
+                     return Err(VMException::LinkerError);
+                }
+                Instruction::InstanceGetChar(_, _, _) => {
+                     return Err(VMException::LinkerError);
+                }
+                Instruction::InstanceGetShort(_, _, _) => {
+                     return Err(VMException::LinkerError);
+                }
                 &Instruction::InstancePut(src, instance, field_id) => {
                     let src: u8 = src.into();
                     let instance: u8 = instance.into();
