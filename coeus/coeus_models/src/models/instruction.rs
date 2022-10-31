@@ -452,29 +452,29 @@ impl Instruction {
             Instruction::OrInt(a, b) => format!("{} v{}, v{}", MNEMONICS[21], a, b),
 
             Instruction::XorIntDstLit16(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[22], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[22], dst, src, constant)
             }
             Instruction::RemIntLit16(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[23], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[23], dst, src, constant)
             }
             Instruction::AndIntLit16(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[24], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[24], dst, src, constant)
             }
             Instruction::OrIntLit16(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[25], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[25], dst, src, constant)
             }
 
             Instruction::XorIntDstLit8(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[26], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[26], dst, src, constant)
             }
             Instruction::RemIntLit8(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[27], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[27], dst, src, constant)
             }
             Instruction::AndIntLit8(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[28], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[28], dst, src, constant)
             }
             Instruction::OrIntLit8(dst, src, constant) => {
-                format!("{} v{}, v{}, {}", MNEMONICS[29], dst, src, constant)
+                format!("{} v{}, v{}, {:#x}", MNEMONICS[29], dst, src, constant)
             }
 
             Instruction::ReturnVoid => MNEMONICS[30].to_string(),
