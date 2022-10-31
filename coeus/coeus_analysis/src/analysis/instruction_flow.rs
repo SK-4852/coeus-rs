@@ -35,6 +35,7 @@ pub struct Branch {
     pub pc: InstructionOffset,
     pub state: State,
     pub previous_pc: InstructionOffset,
+    pub finished: bool
 }
 impl Default for Branch {
     fn default() -> Self {
@@ -44,6 +45,7 @@ impl Default for Branch {
             pc: InstructionOffset(0),
             previous_pc: InstructionOffset(0),
             state: Default::default(),
+            finished: false
         }
     }
 }
@@ -886,14 +888,15 @@ impl InstructionFlow {
     }
     pub fn next_instruction(&mut self) {
         let mut branches_to_add: Vec<(InstructionOffset, Branch)> = vec![];
-        let mut branches_to_remove: Vec<u64> = vec![];
+        // let mut branches_to_remove: Vec<u64> = vec![];
         let mut branches_to_taint: Vec<u64> = vec![];
-        for b in &mut self.branches {
+        for b in self.branches.iter_mut().filter(|b| !b.finished) {
             b.previous_pc = b.pc;
             let instruction = if let Some(instruction) = self.method.get(&b.pc) {
                 instruction
             } else {
-                branches_to_remove.push(b.id);
+                // branches_to_remove.push(b.id);
+                b.finished = true;
                 continue;
             };
 
@@ -1023,7 +1026,8 @@ impl InstructionFlow {
                             branches_to_add.push((b.pc, new_branch));
                         }
                     }
-                    branches_to_remove.push(b.id);
+                    // branches_to_remove.push(b.id);
+                    b.finished = true;
                     continue;
                 }
 
@@ -1549,7 +1553,8 @@ impl InstructionFlow {
                 // branch finished
                 // we also use this for unhandled instructions
                 Instruction::ReturnVoid | Instruction::Return(..) | Instruction::Throw(..) => {
-                    branches_to_remove.push(b.id);
+                    // branches_to_remove.push(b.id);
+                    b.finished = true;
                     continue;
                 }
 
@@ -1577,16 +1582,22 @@ impl InstructionFlow {
             }
             b.pc += instruction.0 .0 / 2;
         }
-        self.branches
-            .retain(|a| !branches_to_remove.iter().any(|id| &a.id == id));
+        // for remove_id in &branches_to_remove {
+        //     if let Some(b) = self.branches.iter_mut().find(|b| b.id == remove_id) {
+        //         b.finished = true;
+        //     }
+        // }
+        // self.branches
+        //     .retain(|a| !branches_to_remove.iter().any(|id| &a.id == id));
         for b_to_taint in branches_to_taint {
-            self.branches
-                .iter_mut()
-                .filter(|b| {
-                    b.id == b_to_taint
-                        || (b.parent_id.is_some() && b.parent_id.unwrap() == b_to_taint)
-                })
-                .for_each(|b| b.state.tainted = true);
+            taint_recursively(b_to_taint, &mut self.branches);
+            // self.branches
+            //     .iter_mut()
+            //     .filter(|b| {
+            //         b.id == b_to_taint
+            //             || (b.parent_id.is_some() && b.parent_id.unwrap() == b_to_taint)
+            //     })
+            //     .for_each(|b| b.state.tainted = true);
         }
         if self.branches.len() < 1000 {
             for (offset, b) in branches_to_add {
@@ -1608,6 +1619,7 @@ impl InstructionFlow {
                 tainted: false,
                 loop_count: HashMap::new(),
             },
+            finished: false
         });
     }
     fn fork(&mut self, mut branch: Branch) -> u64 {
@@ -1625,6 +1637,24 @@ impl InstructionFlow {
     }
     pub fn get_all_branches(&self) -> &Vec<Branch> {
         &self.branches
+    }
+}
+
+fn taint_recursively(id: u64, branches: &mut [Branch]) {
+    let mut parents = Vec::with_capacity(branches.len());
+    for b in branches.iter_mut() {
+        if b.id == id {
+            b.state.tainted = true;
+            continue;
+        }
+        if let Some(parent_id) = b.parent_id {
+            if parent_id == id {
+                parents.push(b.id);
+            }
+        }
+    }
+    for parent in parents {
+        taint_recursively(parent, branches);
     }
 }
 
