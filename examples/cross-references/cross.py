@@ -20,12 +20,12 @@ ao = AnalyzeObject("test-proguard.apk", False, -1)
 
 # Let's find the methods for Security.addProvider... 
 addProvider = ao.find_methods("addProvider")
-# ... from which we can finde the actual call sites
+# ... from which we can find the actual call sites
 crossReferences = addProvider[0].cross_references(ao)
 # Use static flow analysis to find the argument for the addProvider method
 usageInstruction = (
     crossReferences[0]
-    .as_method().find_method_call("Ljava/security/Security;->addProvider(Ljava/security/Provider;)I")[0]
+    .as_method().find_method_call("Ljava/security/Security;\->addProvider\(Ljava/security/Provider;\)I")[0]
 )
 # The only argument to the addProvider method is the actual provider we want to add
 getBouncyCastleProvider = usageInstruction.get_argument_types()[0]
@@ -46,13 +46,13 @@ for b in bcs:
     # this is the interface function we are looking for. This one is usually used, when 
     # proguard obfuscated and minimized the binary
     putCalls = bc.find_method_call(
-        "Ljava/security/Provider;->put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+        "Ljava/security/Provider;\->put\(Ljava/lang/Object;Ljava/lang/Object;\)Ljava/lang/Object;"
     )
     
     # It might be that the provider provides an override, or the function is not obfuscated
     # in which case we call the virtual function
     putBcCalls = bc.find_method_call(
-        bc.name() + "->put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"
+        bc.name() + "\->put\(Ljava/lang/Object;Ljava/lang/Object;\)Ljava/lang/Object;"
     )
     if len(putCalls) > 0:
         for pbc in putCalls:
