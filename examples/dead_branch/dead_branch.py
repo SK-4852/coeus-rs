@@ -16,8 +16,8 @@ for clazz in clazzes:
     # check every method
     for m in clazz.as_class().get_methods():
         # find all branch decision
-        branches = m.find_all_branch_decisions(vm)
+        branches = m.find_all_branch_decisions(vm, True)
         for b in branches:
             # a dead branch is defined to evalute to a constant expression and only be visited once (no loops)
             if b.has_dead_branch():
-                print(f"Found dead branch in {m.signature()}")
+                print(f"Found dead branch in {m.signature()} @ {b.branch_offset()}")
