@@ -246,7 +246,7 @@ fn find_references_to_string<'a: 'b, 'b>(
 
 //TODO: refactor
 fn find_references_to_type<'a: 'b, 'b>(
-    typ: u32,
+    _typ: u32,
     name: &str,
     dex_file: Arc<DexFile>,
     multi_dex: &'a MultiDexFile,
@@ -255,7 +255,7 @@ fn find_references_to_type<'a: 'b, 'b>(
     let mut context_matches: Vec<Evidence> = vec![];
     let vec_loc = Arc::new(Mutex::new(&mut context_matches));
 
-    let type_name = &dex_file.strings[typ as usize].to_str_lossy();
+    let type_name = name;
 
     let classes = multi_dex.classes();
     iterator!(classes).for_each(|(f, c)| {
@@ -297,7 +297,7 @@ fn find_references_to_type<'a: 'b, 'b>(
                                     let name_idx = f.types[method.class_idx as usize];
                                     let name = &f.strings[name_idx as usize];
                                     if let Ok(name) = name.to_str() {
-                                        return name == *type_name;
+                                        return name == type_name;
                                     }
                                     false
                                 }
@@ -656,6 +656,7 @@ fn find_references_to_class<'a: 'b, 'b>(
                                     let name_idx = f.types[method.class_idx as usize];
                                     let name = &f.strings[name_idx as usize];
                                     if let Ok(name) = name.to_str() {
+                                        
                                         return name == class_idx.class_name;
                                     }
                                     false
