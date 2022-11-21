@@ -791,6 +791,43 @@ runtime_impl! {
             }
             Ok(())
         }
+        pub fn arraycopy(vm : &mut VM, args: &[Register]) -> Result<(), VMException> {
+            if args.len() != 5 {
+                return Err(VMException::IndexOutOfBounds);
+            }
+            let from = if let Register::Literal(from_index) = &args[1] {
+                *from_index as usize
+            } else {
+                return Err(VMException::LinkerError);
+            };
+            let dst_start =  if let Register::Literal(from_index) = &args[3] {
+                *from_index as usize
+            } else {
+                return Err(VMException::LinkerError);
+            };
+            let length =  if let Register::Literal(from_index) = &args[4] {
+                *from_index as usize
+            } else {
+                return Err(VMException::LinkerError);
+            };
+            if let (Register::Reference(_name, address),Register::Reference(_n, address2) ) = (&args[0], &args[2]) {
+                log::debug!("Executing built in System->arraycopy");
+                let from_array = if let Some(Value::Array(array)) = vm.heap.get_mut(address) {
+                    array.to_vec()
+                } else {
+                    return Err(VMException::LinkerError);
+                };
+                let to_array =  if let Some(Value::Array(array)) = vm.heap.get_mut(address2) {
+                    array
+                } else {
+                    return Err(VMException::LinkerError);
+                };
+                to_array[dst_start..dst_start+length].copy_from_slice(&from_array[from..from+length]);
+            } else {
+                return Err(VMException::LinkerError);
+            }
+            Ok(())
+        }
     }
 }
 
