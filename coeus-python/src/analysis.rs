@@ -1407,6 +1407,10 @@ impl Class {
             })
             .ok_or_else(|| PyRuntimeError::new_err("method not founud"))
     }
+
+    pub fn get_annotations_off(&self) -> u32 {
+        self.class.annotations_off
+    }
 }
 
 pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {

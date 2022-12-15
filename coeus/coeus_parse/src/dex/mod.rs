@@ -125,6 +125,7 @@ pub fn parse_dex_buf(
                 codes: vec![],
                 static_fields: vec![],
                 interfaces: vec![],
+                annotations_off: class.annotations_off,
             });
             if let Ok(mut ret_classes) = vec_lock.lock() {
                 ret_classes.push(the_class.clone());
@@ -189,6 +190,7 @@ pub fn parse_dex_buf(
             codes: vec![],
             static_fields,
             interfaces,
+            annotations_off : class.annotations_off,
         };
 
         //todo we need the native functions (NO_INDEX since no instructions)

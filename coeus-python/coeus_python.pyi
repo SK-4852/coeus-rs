@@ -165,6 +165,8 @@ class Class:
         """Get a `friendly` name for this class."""
     def find_implementations(self, ao: AnalyzeObject) -> list[Class]:
         """Find all implementations of this interface (if it is an interface)."""
+    def get_annotations_off(self) -> int:
+        """Get offset from the start of the file to the annotations structure for this class"""
 
 class AnalyzeObject:
     # atest#

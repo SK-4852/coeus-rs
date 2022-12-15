@@ -733,6 +733,7 @@ pub struct Class {
     pub access_flags: AccessFlags,
     pub super_class: u32,
     pub interfaces: Vec<u16>,
+    pub annotations_off: u32,
     #[serde(skip_serializing)]
     pub class_data: Option<ClassData>,
     // #[serde(skip_serializing)]
@@ -761,6 +762,7 @@ impl Class {
             access_flags: AccessFlags::PUBLIC,
             super_class: 1,
             interfaces: vec![],
+            annotations_off: 0,
             class_data: None,
             codes: vec![],
             static_fields: vec![],
