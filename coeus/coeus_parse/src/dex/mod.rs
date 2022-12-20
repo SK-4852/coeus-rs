@@ -14,6 +14,7 @@ use std::{
     vec,
 };
 
+use abxml::model::Value;
 use coeus_macros::iterator;
 use coeus_models::models::*;
 
@@ -126,6 +127,8 @@ pub fn parse_dex_buf(
                 static_fields: vec![],
                 interfaces: vec![],
                 annotations_off: class.annotations_off,
+                annotations: vec![],
+                method_annotations: vec![],
             });
             if let Ok(mut ret_classes) = vec_lock.lock() {
                 ret_classes.push(the_class.clone());
@@ -175,6 +178,170 @@ pub fn parse_dex_buf(
             }
         };
 
+        let annotations: Vec<Annotation> = {
+            if class.annotations_off == 0 {
+                vec![]
+            } else {
+                class_data_cursor
+                    .seek(SeekFrom::Start(class.annotations_off as u64))
+                    .unwrap();
+                let annotations_directory_item = AnnotationsDirectoryItem::from_bytes(&mut class_data_cursor);
+
+                if annotations_directory_item.class_annotations_off == 0 {
+                    vec![]
+                } else {
+                
+                    class_data_cursor
+                        .seek(SeekFrom::Start(annotations_directory_item.class_annotations_off as u64))
+                        .unwrap();
+                    let annotation_set_item: AnnotationSetItem = AnnotationSetItem::from_bytes(&mut class_data_cursor);
+                    
+                    //let mut annotation_items: Vec<AnnotationItem> = vec![];
+                    let mut annotations: Vec<Annotation> = vec![];
+                    for i in 0..annotation_set_item.size {
+
+                        class_data_cursor
+                            .seek(SeekFrom::Start(annotation_set_item.entries[i as usize].annotation_off as u64))
+                            .unwrap();
+
+                        let annotation_item: AnnotationItem = AnnotationItem::from_bytes(&mut class_data_cursor);
+                        let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
+                        let annotation_elements: Vec<AnnotationElement> = encoded_annotation.elements;
+
+                        let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
+                        for j in 0..encoded_annotation.size {
+                            let name= annotation_elements[j as usize].name_idx;
+                            let encoded_item = annotation_elements[j as usize].value.clone();
+                            let mut val: String = String::new();
+                            
+                            //TODO: check other values and subannotations
+                        if matches!(encoded_item.value_type, ValueType::String) {
+                                val = get_string_from_idx(encoded_item.get_string_id() as u16, &strings)
+                                    .unwrap_or_else(|| {
+                                        log::error!("Could not resolve annotation value");
+                                        "-UNKNOWN".to_string()
+                                    });
+                            }
+
+                            let data = AnnotationElementsData {
+                                name: get_string_from_idx(name as u16, &strings)
+                                .unwrap_or_else(|| {
+                                    log::error!("Could not resolve class name");
+                                    "-UNKONWN-".to_string()
+                                }),
+                                value: val,
+                            };
+                            annotation_elements_data.push(data);
+                        }
+
+                        let class_name = get_string_from_idx(types[encoded_annotation.type_idx as usize] as u16, &strings)
+                        .unwrap_or_else(|| {
+                            log::error!("Could not resolve class name");
+                            "-UNKONWN- Class".to_string()
+                        });
+                            
+                        let annotation: Annotation = Annotation {
+                            visibility: annotation_item.visibility,
+                            type_idx: encoded_annotation.type_idx,
+                            class_name: class_name,
+                            elements: annotation_elements_data,
+                        };
+
+                        annotations.push(annotation);
+                    }
+                    
+                    //print!("{:?}\n\n", annotations);
+                    annotations
+                }  
+            }
+        };
+
+        let method_annotations: Vec<AnnotationMethod> = {
+            if class.annotations_off == 0 {
+                vec![]
+            } else {
+                class_data_cursor
+                    .seek(SeekFrom::Start(class.annotations_off as u64))
+                    .unwrap();
+                let annotations_directory_item = AnnotationsDirectoryItem::from_bytes(&mut class_data_cursor);
+
+                if annotations_directory_item.annotated_methods_size == 0 {
+                    vec![]
+                } else {
+                    let mut m_annotations: Vec<AnnotationMethod> = vec![];
+
+                    for i in 0..annotations_directory_item.annotated_methods_size {
+                        let m_annotations_off = annotations_directory_item.method_annotations[i as usize].annotations_off;
+
+                        class_data_cursor
+                            .seek(SeekFrom::Start(m_annotations_off as u64 ))
+                            .unwrap();
+
+                        let annotation_set_item = AnnotationSetItem::from_bytes(&mut class_data_cursor);
+                        
+                        for j in 0..annotation_set_item.size {
+
+                            class_data_cursor
+                                .seek(SeekFrom::Start(annotation_set_item.entries[j as usize].annotation_off as u64))
+                                .unwrap();
+
+                            let annotation_item: AnnotationItem = AnnotationItem::from_bytes(&mut class_data_cursor);
+                            let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
+                            let annotation_elements: Vec<AnnotationElement> = encoded_annotation.elements;
+                            
+                            let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
+                            for k in 0..encoded_annotation.size {
+                                let name= annotation_elements[k as usize].name_idx;
+                                let encoded_item = annotation_elements[k as usize].value.clone();
+                                let mut val: String = String::new();
+                                
+                                //TODO: check other values and subannotations
+                            if matches!(encoded_item.value_type, ValueType::String) {
+                                    val = get_string_from_idx(encoded_item.get_string_id() as u16, &strings)
+                                        .unwrap_or_else(|| {
+                                            log::error!("Could not resolve annotation value");
+                                            "-UNKNOWN".to_string()
+                                        });
+                                }
+    
+                                let data = AnnotationElementsData {
+                                    name: get_string_from_idx(name as u16, &strings)
+                                    .unwrap_or_else(|| {
+                                        log::error!("Could not resolve class name");
+                                        "-UNKONWN-".to_string()
+                                    }),
+                                    value: val,
+                                };
+                                annotation_elements_data.push(data);
+                            }
+                            
+                            let class_name = get_string_from_idx(types[encoded_annotation.type_idx as usize] as u16, &strings)
+                                .unwrap_or_else(|| {
+                                    log::error!("Could not resolve class name");
+                                    "-UNKONWN- Class".to_string()
+                                });
+                            
+                             
+                            let m_annotation: AnnotationMethod = AnnotationMethod {
+                                method_idx: annotations_directory_item.method_annotations[i as usize].method_idx,
+                                visibility: annotation_item.visibility,
+                                type_idx: encoded_annotation.type_idx,
+                                class_name: class_name,
+                                elements: annotation_elements_data,
+                            };    
+                            
+                            m_annotations.push(m_annotation);
+                        }
+
+                    }
+                    
+                    //print!("{:?}\n\n", m_annotations);
+                    m_annotations
+                }  
+            }
+        };
+
+
         let mut the_class = Class {
             dex_identifier: format!("{:02x?}", config.signature),
             class_idx: class.class_idx,
@@ -191,6 +358,8 @@ pub fn parse_dex_buf(
             static_fields,
             interfaces,
             annotations_off : class.annotations_off,
+            annotations,
+            method_annotations: method_annotations,
         };
 
         //todo we need the native functions (NO_INDEX since no instructions)

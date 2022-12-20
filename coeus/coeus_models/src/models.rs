@@ -465,6 +465,7 @@ impl Decode for EncodedItem {
                 value_type,
                 values: vec![],
                 inner: None,
+               // encoded_annotation: None,
             }
         } else if matches!(value_type, ValueType::Array) {
             let encoded_array = EncodedArray::from_bytes(byte_view);
@@ -474,13 +475,17 @@ impl Decode for EncodedItem {
                 value_type,
                 values: vec![],
                 inner: Some(encoded_array),
+               // encoded_annotation: None,
             }
         } else if matches!(value_type, ValueType::Annotation) {
+            //let encoded_annotation: EncodedAnnotation = EncodedAnnotation::from_bytes(byte_view);
+            
             EncodedItem {
                 value_arg,
                 value_type,
                 values: vec![],
                 inner: None,
+               // encoded_annotation: Some(encoded_annotation),
             }
         } else {
             let mut buffer = vec![0u8; (value_arg + 1) as usize];
@@ -492,6 +497,7 @@ impl Decode for EncodedItem {
                 value_type,
                 values: buffer,
                 inner: None,
+               // encoded_annotation: None,
             }
         }
     }
@@ -725,6 +731,55 @@ impl AccessFlags {
     }
 }
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+pub enum AnnotationVisibility {
+    VisibilityBuild,
+    VisibilityRuntime,
+    VisibilitySystem,
+    Error,
+}
+
+impl std::fmt::Display for AnnotationVisibility {
+    fn fmt(&self, f: &mut _core::fmt::Formatter<'_>) -> _core::fmt::Result {
+        f.write_str(&self.get_string_representation())
+    }
+}
+
+impl AnnotationVisibility {
+    pub fn get_string_representation(&self) -> String {
+        match self {
+            AnnotationVisibility::VisibilityBuild => String::from("Build"),
+            AnnotationVisibility::VisibilityRuntime => String::from("Runtime"),
+            AnnotationVisibility::VisibilitySystem => String::from("System"),
+            AnnotationVisibility::Error => String::from("Error"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize,)]
+pub struct AnnotationElementsData {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize,)]
+pub struct Annotation {
+    pub visibility: AnnotationVisibility,
+    pub type_idx: u64,
+    pub class_name: String,
+    pub elements: Vec<AnnotationElementsData>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize,)]
+pub struct AnnotationMethod {
+    pub method_idx: u32,
+    pub visibility: AnnotationVisibility,
+    pub type_idx: u64,
+    pub class_name: String,
+    pub elements: Vec<AnnotationElementsData>,    
+}
+
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Class {
     pub dex_identifier: String,
@@ -734,6 +789,8 @@ pub struct Class {
     pub super_class: u32,
     pub interfaces: Vec<u16>,
     pub annotations_off: u32,
+    pub annotations: Vec<Annotation>,
+    pub method_annotations: Vec<AnnotationMethod>,
     #[serde(skip_serializing)]
     pub class_data: Option<ClassData>,
     // #[serde(skip_serializing)]
@@ -763,6 +820,8 @@ impl Class {
             super_class: 1,
             interfaces: vec![],
             annotations_off: 0,
+            annotations: vec![],
+            method_annotations: vec![],
             class_data: None,
             codes: vec![],
             static_fields: vec![],
@@ -866,8 +925,240 @@ impl Class {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone,serde::Serialize, serde::Deserialize,  PartialEq)]
+pub struct AnnotationElement {
+    pub name_idx: u64,
+    pub value: EncodedItem,
+}
 
+impl Decode for AnnotationElement {
+    type DecodableUnit = Self;
+    
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let (_, n_idx) = Self::read_leb128(byte_view).unwrap();
+        let val = EncodedItem::from_bytes(byte_view);
+
+        // if matches!(val.value_type, ValueType::Annotation) {
+        //     EncodedAnnotation::from_bytes(byte_view);
+        // }
+        Self { name_idx: n_idx, value: val}
+        
+
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EncodedAnnotation {
+    pub type_idx: u64,
+    pub size: u64, 
+    pub elements: Vec<AnnotationElement>,
+}
+
+impl Decode for EncodedAnnotation {
+    type DecodableUnit = Self;
+    
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let (_, type_idx) = Self::read_leb128(byte_view).unwrap();
+        let (_, size) = Self::read_leb128(byte_view).unwrap();
+
+        let mut elems: Vec<AnnotationElement> = vec![];
+        for _ in 0..size {
+            let annotation_element: AnnotationElement = AnnotationElement::from_bytes(byte_view);
+            elems.push(annotation_element);
+        }
+
+        Self { 
+            type_idx: type_idx,
+            size: size,
+            elements: elems,
+        }
+
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct AnnotationItem {
+    pub visibility: AnnotationVisibility,
+    pub annotation: EncodedAnnotation,
+}
+
+impl Decode for AnnotationItem {
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let vis:AnnotationVisibility = match u8::from_bytes(byte_view) {
+            0x00 => AnnotationVisibility::VisibilityBuild,
+            0x01 => AnnotationVisibility::VisibilityRuntime,
+            0x02 => AnnotationVisibility::VisibilitySystem,
+            _ => AnnotationVisibility::Error,
+        };
+        
+        let enc_annotation: EncodedAnnotation = EncodedAnnotation::from_bytes(byte_view);
+        
+        Self { visibility: vis, annotation: enc_annotation }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct AnnotationOffItem {
+    pub annotation_off: u32,
+}
+
+impl Decode for AnnotationOffItem {
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let off = u32::from_bytes(byte_view);
+
+        Self { annotation_off: off }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct AnnotationSetItem {
+    pub size: u32,
+    pub entries: Vec<AnnotationOffItem>,
+}
+
+impl Decode for AnnotationSetItem {
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let s = u32::from_bytes(byte_view);
+
+        let mut entrs: Vec<AnnotationOffItem> = vec![];
+
+        for _ in 0..s {
+            let annotation_off_item: AnnotationOffItem = AnnotationOffItem::from_bytes(byte_view);
+            entrs.push(annotation_off_item);
+        }
+        
+        Self{
+            size: s,
+            entries: entrs,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct FieldAnnotation {
+    pub field_idx: u32,
+    pub annotations_off: u32,
+}
+
+impl Decode for FieldAnnotation {
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let idx = u32::from_bytes(byte_view);
+        let off = u32::from_bytes(byte_view);
+        Self {
+            field_idx: idx as u32,
+            annotations_off: off,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct MethodAnnotation {
+    pub method_idx: u32,
+    pub annotations_off: u32,
+}
+
+impl Decode for MethodAnnotation {
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let idx = u32::from_bytes(byte_view);
+        let off = u32::from_bytes(byte_view);
+        Self {
+            method_idx: idx as u32,
+            annotations_off: off,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ParameterAnnotation {
+    pub method_idx: u32,
+    pub annotations_off: u32,
+}
+
+impl Decode for ParameterAnnotation {
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let idx = u32::from_bytes(byte_view);
+        let off = u32::from_bytes(byte_view);
+        Self {
+            method_idx: idx as u32,
+            annotations_off: off,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct AnnotationsDirectoryItem {
+    pub class_annotations_off: u32,
+    pub fields_size: u32,
+    pub annotated_methods_size: u32,
+    pub annotaded_parameters_size: u32,
+    pub field_annotations: Vec<FieldAnnotation>,
+    pub method_annotations: Vec<MethodAnnotation>,
+    pub parameter_annotations: Vec<ParameterAnnotation>,
+}
+
+impl Decode for AnnotationsDirectoryItem{
+    type DecodableUnit = Self;
+
+    fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
+        let c_annotations_off :u32 = u32::from_bytes(byte_view);
+        let f_size: u32 = u32::from_bytes(byte_view);
+        let an_methods_size: u32 = u32::from_bytes(byte_view);
+        let an_paremeters_size: u32 = u32::from_bytes(byte_view);
+
+        let mut f_annotations: Vec<FieldAnnotation> = vec![];
+        let mut m_annotations: Vec<MethodAnnotation> = vec![];
+        let mut p_annotations: Vec<ParameterAnnotation> = vec![];
+
+        for _ in 0..f_size {
+            let field_annotation: FieldAnnotation = FieldAnnotation::from_bytes(byte_view);
+            f_annotations.push(field_annotation);
+        }
+
+        for _ in 0..an_methods_size {
+            let method_annotation: MethodAnnotation = MethodAnnotation::from_bytes(byte_view);
+            m_annotations.push(method_annotation);
+        }
+
+        for _ in 0..an_paremeters_size{
+            let parameter_annotation: ParameterAnnotation = ParameterAnnotation::from_bytes(byte_view);
+            p_annotations.push(parameter_annotation);
+        }
+
+        Self { 
+            class_annotations_off: c_annotations_off,
+            fields_size: f_size,
+            annotated_methods_size: an_methods_size,
+            annotaded_parameters_size: an_paremeters_size,
+            field_annotations: f_annotations,
+            method_annotations: m_annotations,
+            parameter_annotations: p_annotations,
+        }
+    }
+}
+
+
+#[repr(C)]
+#[derive(Debug)]
 pub struct ClassDefItem {
     pub class_idx: u32,
     pub access_flags: u32,
@@ -1360,3 +1651,5 @@ impl ToString for StringType {
         }
     }
 }
+
+
