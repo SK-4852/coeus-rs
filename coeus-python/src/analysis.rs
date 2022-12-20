@@ -19,7 +19,7 @@ use coeus::{
     },
     coeus_emulation::vm::{runtime::StringClass, Register, Value, VM},
     coeus_models::models::{
-        self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction, AnnotationVisibility,
+        self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction,
     },
 };
 use pyo3::{
@@ -1483,11 +1483,11 @@ impl Class {
         self.class.annotations_off
     }
 
-    pub fn get_class_annotations(&self) -> PyResult<Annotation> {
+    pub fn get_class_annotations(&self) -> Vec<Annotation> {
         self.class
             .annotations
             .iter()
-            .find(|a| a.visibility != AnnotationVisibility::Error)
+            //.find(|a| a.visibility != AnnotationVisibility::Error)
             .map(|a| Annotation {
                 visibility: a.visibility.to_string(),
                 classname: a.class_name.to_string(),
@@ -1497,16 +1497,15 @@ impl Class {
                         name: elem.name.clone(),
                         value: elem.value.clone(),
                     })
-                    .collect(),
-            })
-            .ok_or_else(|| PyRuntimeError::new_err("class annotations not founud"))
+                    .collect()
+            }).collect()
+            //.ok_or_else(|| PyRuntimeError::new_err("class annotations not founud"))
             // TODO: Though annotation offset > 0, there are errors sometimes
 
     }
 
     pub fn get_method_annotations(&self) -> Vec<AnnotationMethod> {
-        let mut annotation_methods: Vec<AnnotationMethod> = vec![];
-        annotation_methods = self.class
+        self.class
             .method_annotations
             .iter()
             //.find(|a| a.visibility != AnnotationVisibility::Error)
@@ -1521,9 +1520,7 @@ impl Class {
                         value: elem.value.clone(),
                     })
                     .collect()
-            }).collect();
-            annotation_methods
-        
+            }).collect()
     }
 }
 

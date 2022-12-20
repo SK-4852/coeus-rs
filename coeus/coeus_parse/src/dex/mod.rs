@@ -11,10 +11,8 @@ use std::{
     collections::HashMap,
     io::{Cursor, Read, Seek, SeekFrom},
     sync::{Arc, Mutex},
-    vec,
 };
 
-use abxml::model::Value;
 use coeus_macros::iterator;
 use coeus_models::models::*;
 
@@ -196,7 +194,6 @@ pub fn parse_dex_buf(
                         .unwrap();
                     let annotation_set_item: AnnotationSetItem = AnnotationSetItem::from_bytes(&mut class_data_cursor);
                     
-                    //let mut annotation_items: Vec<AnnotationItem> = vec![];
                     let mut annotations: Vec<Annotation> = vec![];
                     for i in 0..annotation_set_item.size {
 
@@ -212,17 +209,29 @@ pub fn parse_dex_buf(
                         for j in 0..encoded_annotation.size {
                             let name= annotation_elements[j as usize].name_idx;
                             let encoded_item = annotation_elements[j as usize].value.clone();
-                            let mut val: String = String::new();
                             
-                            //TODO: check other values and subannotations
-                        if matches!(encoded_item.value_type, ValueType::String) {
-                                val = get_string_from_idx(encoded_item.get_string_id() as u16, &strings)
-                                    .unwrap_or_else(|| {
-                                        log::error!("Could not resolve annotation value");
-                                        "-UNKNOWN".to_string()
-                                    });
-                            }
-
+                                //TODO: check other values and subannotations
+                            let val = match encoded_item.value_type {
+                                ValueType::Byte => format!("0x{:2x}", encoded_item.try_get_value::<u8>().unwrap()),
+                                ValueType::Short => format!("{}", encoded_item.try_get_value::<u16>().unwrap()),
+                                ValueType::Char => format!("'{}'", encoded_item.try_get_value::<char>().unwrap()),
+                                ValueType::Int => format!("{}", encoded_item.try_get_value::<u32>().unwrap()),
+                                ValueType::Long => format!("{}", encoded_item.try_get_value::<u64>().unwrap()),
+                                ValueType::String => get_string_from_idx(encoded_item.get_string_id() as u16, &strings).unwrap(),
+                                ValueType::Float => format!("{:?}", encoded_item),
+                                ValueType::Double => format!("{:?}", encoded_item),
+                                ValueType::MethodType => format!("{:?}", encoded_item),
+                                ValueType::MethodHandle => format!("{:?}", encoded_item),
+                                ValueType::Type => format!("{:?}", encoded_item),
+                                ValueType::Field => format!("{:?}", encoded_item),
+                                ValueType::Method => format!("{:?}", encoded_item),
+                                ValueType::Enum => format!("{:?}", encoded_item),
+                                ValueType::Array => format!("{:?}", encoded_item),
+                                ValueType::Annotation => format!("{:?}", encoded_item),
+                                ValueType::Null => format!("null"),
+                                ValueType::Boolean => format!("{}", encoded_item.try_get_value::<bool>().unwrap()),
+                            };
+                        
                             let data = AnnotationElementsData {
                                 name: get_string_from_idx(name as u16, &strings)
                                 .unwrap_or_else(|| {
@@ -231,7 +240,9 @@ pub fn parse_dex_buf(
                                 }),
                                 value: val,
                             };
+                            
                             annotation_elements_data.push(data);
+                        
                         }
 
                         let class_name = get_string_from_idx(types[encoded_annotation.type_idx as usize] as u16, &strings)
@@ -250,7 +261,6 @@ pub fn parse_dex_buf(
                         annotations.push(annotation);
                     }
                     
-                    //print!("{:?}\n\n", annotations);
                     annotations
                 }  
             }
@@ -293,16 +303,28 @@ pub fn parse_dex_buf(
                             for k in 0..encoded_annotation.size {
                                 let name= annotation_elements[k as usize].name_idx;
                                 let encoded_item = annotation_elements[k as usize].value.clone();
-                                let mut val: String = String::new();
                                 
                                 //TODO: check other values and subannotations
-                            if matches!(encoded_item.value_type, ValueType::String) {
-                                    val = get_string_from_idx(encoded_item.get_string_id() as u16, &strings)
-                                        .unwrap_or_else(|| {
-                                            log::error!("Could not resolve annotation value");
-                                            "-UNKNOWN".to_string()
-                                        });
-                                }
+                                let val = match encoded_item.value_type {
+                                    ValueType::Byte => format!("0x{:2x}", encoded_item.try_get_value::<u8>().unwrap()),
+                                    ValueType::Short => format!("{}", encoded_item.try_get_value::<u16>().unwrap()),
+                                    ValueType::Char => format!("'{}'", encoded_item.try_get_value::<char>().unwrap()),
+                                    ValueType::Int => format!("{}", encoded_item.try_get_value::<u32>().unwrap()),
+                                    ValueType::Long => format!("{}", encoded_item.try_get_value::<u64>().unwrap()),
+                                    ValueType::String => get_string_from_idx(encoded_item.get_string_id() as u16, &strings).unwrap(),
+                                    ValueType::Float => format!("{:?}", encoded_item),
+                                    ValueType::Double => format!("{:?}", encoded_item),
+                                    ValueType::MethodType => format!("{:?}", encoded_item),
+                                    ValueType::MethodHandle => format!("{:?}", encoded_item),
+                                    ValueType::Type => format!("{:?}", encoded_item),
+                                    ValueType::Field => format!("{:?}", encoded_item),
+                                    ValueType::Method => format!("{:?}", encoded_item),
+                                    ValueType::Enum => format!("{:?}", encoded_item),
+                                    ValueType::Array => format!("{:?}", encoded_item),
+                                    ValueType::Annotation => format!("{:?}", encoded_item),
+                                    ValueType::Null => format!("null"),
+                                    ValueType::Boolean => format!("{}", encoded_item.try_get_value::<bool>().unwrap()),
+                                };
     
                                 let data = AnnotationElementsData {
                                     name: get_string_from_idx(name as u16, &strings)
@@ -335,7 +357,6 @@ pub fn parse_dex_buf(
 
                     }
                     
-                    //print!("{:?}\n\n", m_annotations);
                     m_annotations
                 }  
             }

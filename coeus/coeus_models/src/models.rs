@@ -465,27 +465,21 @@ impl Decode for EncodedItem {
                 value_type,
                 values: vec![],
                 inner: None,
-               // encoded_annotation: None,
             }
         } else if matches!(value_type, ValueType::Array) {
             let encoded_array = EncodedArray::from_bytes(byte_view);
-
             EncodedItem {
                 value_arg,
                 value_type,
                 values: vec![],
                 inner: Some(encoded_array),
-               // encoded_annotation: None,
             }
-        } else if matches!(value_type, ValueType::Annotation) {
-            //let encoded_annotation: EncodedAnnotation = EncodedAnnotation::from_bytes(byte_view);
-            
+        } else if matches!(value_type, ValueType::Annotation) {           
             EncodedItem {
                 value_arg,
                 value_type,
                 values: vec![],
                 inner: None,
-               // encoded_annotation: Some(encoded_annotation),
             }
         } else {
             let mut buffer = vec![0u8; (value_arg + 1) as usize];
@@ -497,7 +491,6 @@ impl Decode for EncodedItem {
                 value_type,
                 values: buffer,
                 inner: None,
-               // encoded_annotation: None,
             }
         }
     }

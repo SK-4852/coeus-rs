@@ -167,9 +167,9 @@ class Class:
         """Find all implementations of this interface (if it is an interface)."""
     def get_annotations_off(self) -> int:
         """Get offset from the start of the file to the annotations structure for this class"""
-    def get_class_annotations(self) -> Annotation:
+    def get_class_annotations(self) -> list[Annotation]:
         """Get annotations"""
-    def get_method_annotations(self) -> AnnotationMethod:
+    def get_method_annotations(self) -> list[AnnotationMethod]:
         """Get method annotations"""
 
 class Annotation:
@@ -195,7 +195,7 @@ class AnnotationMethod:
         """Get the class name of the annotation"""
     def get_elements(self) -> list[AnnotationElement]:
         """Get all annotation elements"""
-        
+
 class AnalyzeObject:
     # atest#
     def __init__(self, file_name: str, build_graph: bool, max_nesting: int):
