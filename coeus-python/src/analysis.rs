@@ -19,7 +19,7 @@ use coeus::{
     },
     coeus_emulation::vm::{runtime::StringClass, Register, Value, VM},
     coeus_models::models::{
-        self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction,
+        self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction, AnnotationVisibility,
     },
 };
 use pyo3::{
@@ -459,6 +459,77 @@ pub struct Method {
 pub struct Class {
     class: Arc<models::Class>,
     file: Arc<DexFile>,
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct AnnotationElement {
+    pub(crate) name: String,
+    pub(crate) value: String,
+}
+
+#[pymethods]
+impl AnnotationElement {
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn get_value(&self) -> &str {
+        &self.value
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+/// This represents an annotation.
+pub struct Annotation {
+    pub(crate) visibility: String,
+    pub(crate) classname: String,
+    pub(crate) elements: Vec<AnnotationElement>,
+}
+
+#[pymethods]
+impl Annotation {
+    pub fn get_visibility(&self) -> &str {
+        &self.visibility.as_str()
+    }
+
+    pub fn get_classname(&self) -> &str {
+        &self.classname.as_str()
+    }
+
+    pub fn get_elements(&self) -> Vec<AnnotationElement> {
+        self.elements.clone()
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+/// This represents an annotation.
+pub struct AnnotationMethod {
+    pub(crate) method_idx: u32,
+    pub(crate) visibility: String,
+    pub(crate) classname: String,
+    pub(crate) elements: Vec<AnnotationElement>,
+}
+
+#[pymethods]
+impl AnnotationMethod {
+    pub fn get_method_idx(&self) -> u32{
+        self.method_idx
+    }
+
+    pub fn get_visibility(&self) -> &str {
+        &self.visibility.as_str()
+    }
+
+    pub fn get_classname(&self) -> &str {
+        &self.classname.as_str()
+    }
+
+    pub fn get_elements(&self) -> Vec<AnnotationElement> {
+        self.elements.clone()
+    }
 }
 
 #[pyclass]
@@ -1411,6 +1482,49 @@ impl Class {
     pub fn get_annotations_off(&self) -> u32 {
         self.class.annotations_off
     }
+
+    pub fn get_class_annotations(&self) -> PyResult<Annotation> {
+        self.class
+            .annotations
+            .iter()
+            .find(|a| a.visibility != AnnotationVisibility::Error)
+            .map(|a| Annotation {
+                visibility: a.visibility.to_string(),
+                classname: a.class_name.to_string(),
+                elements: a.elements
+                    .iter()
+                    .map(|elem| AnnotationElement {
+                        name: elem.name.clone(),
+                        value: elem.value.clone(),
+                    })
+                    .collect(),
+            })
+            .ok_or_else(|| PyRuntimeError::new_err("class annotations not founud"))
+            // TODO: Though annotation offset > 0, there are errors sometimes
+
+    }
+
+    pub fn get_method_annotations(&self) -> Vec<AnnotationMethod> {
+        let mut annotation_methods: Vec<AnnotationMethod> = vec![];
+        annotation_methods = self.class
+            .method_annotations
+            .iter()
+            //.find(|a| a.visibility != AnnotationVisibility::Error)
+            .map(|a| AnnotationMethod {
+                method_idx: a.method_idx,
+                visibility: a.visibility.to_string(),
+                classname: a.class_name.to_string(),
+                elements: a.elements
+                    .iter()
+                    .map(|elem| AnnotationElement {
+                        name: elem.name.clone(),
+                        value: elem.value.clone(),
+                    })
+                    .collect()
+            }).collect();
+            annotation_methods
+        
+    }
 }
 
 pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -1424,5 +1538,8 @@ pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Flow>()?;
     m.add_class::<FlowState>()?;
     m.add_class::<FlowBranch>()?;
+    m.add_class::<Annotation>()?;
+    m.add_class::<AnnotationElement>()?;
+    m.add_class::<AnnotationMethod>()?;
     Ok(())
 }
