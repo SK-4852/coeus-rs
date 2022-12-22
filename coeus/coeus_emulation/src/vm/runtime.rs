@@ -33,364 +33,262 @@ lazy_static! {
             StringBuilder::class_name().to_string(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
                 class_idx: 2317,
                 class_name: "Ljava/lang/StringBuilder;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             StringClass::class_name().to_string(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
                 class_idx: 2315,
                 class_name: "Ljava/lang/String;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             AndroidBase64::class_name().to_string(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: "Landroid/util/Base64;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             ObjectClass::class_name().to_string(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: "Ljava/lang/Object;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             MessageDigest::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: "Ljava/security/MessageDigest;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             IvParameterSpec::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: "Ljavax/crypto/spec/IvParameterSpec;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             SecretKeySpec::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: "Ljavax/crypto/spec/SecretKeySpec;".to_string(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             ClassObject::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: ClassObject::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             ClassLoader::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: ClassLoader::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Integer::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Integer::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Long::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Long::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             JavaArray::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: JavaArray::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             System::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: System::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Cipher::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Cipher::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             KeyGenerator::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: KeyGenerator::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             PrintWriter::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: PrintWriter::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Context::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Context::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             AssetManager::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: AssetManager::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             InputStream::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: InputStream::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             SharedPreferences::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: SharedPreferences::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             SecureRandom::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: SecureRandom::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Application::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Application::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Charset::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Charset::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Objects::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Objects::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Math::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Math::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
         map.insert(
             Debug::class_name(),
             Arc::new(Class {
                 dex_identifier: String::from("RUNTIME"),
-                class_data: None,
                 access_flags: AccessFlags::PUBLIC,
                 super_class: 0xff_ff_ff_ff,
-                interfaces: vec![],
-                codes: vec![],
-                class_idx: 0,
                 class_name: Debug::class_name(),
-                static_fields: vec![],
+                ..Default::default()
             }),
         );
 

@@ -462,6 +462,77 @@ pub struct Class {
 }
 
 #[pyclass]
+#[derive(Clone)]
+pub struct AnnotationElement {
+    pub(crate) name: String,
+    pub(crate) value: String,
+}
+
+#[pymethods]
+impl AnnotationElement {
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn get_value(&self) -> &str {
+        &self.value
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+/// This represents an annotation.
+pub struct Annotation {
+    pub(crate) visibility: String,
+    pub(crate) classname: String,
+    pub(crate) elements: Vec<AnnotationElement>,
+}
+
+#[pymethods]
+impl Annotation {
+    pub fn get_visibility(&self) -> &str {
+        self.visibility.as_str()
+    }
+
+    pub fn get_classname(&self) -> &str {
+        self.classname.as_str()
+    }
+
+    pub fn get_elements(&self) -> Vec<AnnotationElement> {
+        self.elements.clone()
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+/// This represents an annotation.
+pub struct AnnotationMethod {
+    pub(crate) method_idx: u32,
+    pub(crate) visibility: String,
+    pub(crate) classname: String,
+    pub(crate) elements: Vec<AnnotationElement>,
+}
+
+#[pymethods]
+impl AnnotationMethod {
+    pub fn get_method_idx(&self) -> u32{
+        self.method_idx
+    }
+
+    pub fn get_visibility(&self) -> &str {
+        self.visibility.as_str()
+    }
+
+    pub fn get_classname(&self) -> &str {
+        self.classname.as_str()
+    }
+
+    pub fn get_elements(&self) -> Vec<AnnotationElement> {
+        self.elements.clone()
+    }
+}
+
+#[pyclass]
 /// This represents a string
 pub struct DexString {
     pub(crate) string: String,
@@ -555,7 +626,7 @@ impl NativeSymbol {
         if !self.is_export {
             return vec![];
         }
-        (&self.file.data()[self.address as usize..(self.address + self.size - 1) as usize]).to_vec()
+        (self.file.data()[self.address as usize..(self.address + self.size - 1) as usize]).to_vec()
     }
 }
 
@@ -1407,6 +1478,47 @@ impl Class {
             })
             .ok_or_else(|| PyRuntimeError::new_err("method not founud"))
     }
+
+    pub fn get_annotations_off(&self) -> u32 {
+        self.class.annotations_off
+    }
+
+    pub fn get_class_annotations(&self) -> Vec<Annotation> {
+        self.class
+            .annotations
+            .iter()
+            .map(|a| Annotation {
+                visibility: a.visibility.to_string(),
+                classname: a.class_name.to_string(),
+                elements: a.elements
+                    .iter()
+                    .map(|elem| AnnotationElement {
+                        name: elem.name.clone(),
+                        value: elem.value.clone(),
+                    })
+                    .collect()
+            }).collect()
+            // TODO: Though annotation offset > 0, there are errors sometimes
+
+    }
+
+    pub fn get_method_annotations(&self) -> Vec<AnnotationMethod> {
+        self.class
+            .method_annotations
+            .iter()
+            .map(|a| AnnotationMethod {
+                method_idx: a.method_idx,
+                visibility: a.visibility.to_string(),
+                classname: a.class_name.to_string(),
+                elements: a.elements
+                    .iter()
+                    .map(|elem| AnnotationElement {
+                        name: elem.name.clone(),
+                        value: elem.value.clone(),
+                    })
+                    .collect()
+            }).collect()
+    }
 }
 
 pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -1420,5 +1532,8 @@ pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Flow>()?;
     m.add_class::<FlowState>()?;
     m.add_class::<FlowBranch>()?;
+    m.add_class::<Annotation>()?;
+    m.add_class::<AnnotationElement>()?;
+    m.add_class::<AnnotationMethod>()?;
     Ok(())
 }
