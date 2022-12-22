@@ -17,7 +17,7 @@ goblin = "0.4.3"
 bitflags = "1.2.1"
 tempfile = "3.2.0"
 abxml = {version = "0.8.2", default-features = false}
-serde-xml-rs = "0.5.1"
+serde-xml-rs = "0.4.1"
 serde = {version = "1.0.123", features = ["derive"]}
 log = "0.4"
 regex = "1.4"
