@@ -491,11 +491,11 @@ pub struct Annotation {
 #[pymethods]
 impl Annotation {
     pub fn get_visibility(&self) -> &str {
-        &self.visibility.as_str()
+        self.visibility.as_str()
     }
 
     pub fn get_classname(&self) -> &str {
-        &self.classname.as_str()
+        self.classname.as_str()
     }
 
     pub fn get_elements(&self) -> Vec<AnnotationElement> {
@@ -520,11 +520,11 @@ impl AnnotationMethod {
     }
 
     pub fn get_visibility(&self) -> &str {
-        &self.visibility.as_str()
+        self.visibility.as_str()
     }
 
     pub fn get_classname(&self) -> &str {
-        &self.classname.as_str()
+        self.classname.as_str()
     }
 
     pub fn get_elements(&self) -> Vec<AnnotationElement> {
@@ -626,7 +626,7 @@ impl NativeSymbol {
         if !self.is_export {
             return vec![];
         }
-        (&self.file.data()[self.address as usize..(self.address + self.size - 1) as usize]).to_vec()
+        (self.file.data()[self.address as usize..(self.address + self.size - 1) as usize]).to_vec()
     }
 }
 
@@ -1487,7 +1487,6 @@ impl Class {
         self.class
             .annotations
             .iter()
-            //.find(|a| a.visibility != AnnotationVisibility::Error)
             .map(|a| Annotation {
                 visibility: a.visibility.to_string(),
                 classname: a.class_name.to_string(),
@@ -1499,7 +1498,6 @@ impl Class {
                     })
                     .collect()
             }).collect()
-            //.ok_or_else(|| PyRuntimeError::new_err("class annotations not founud"))
             // TODO: Though annotation offset > 0, there are errors sometimes
 
     }
@@ -1508,7 +1506,6 @@ impl Class {
         self.class
             .method_annotations
             .iter()
-            //.find(|a| a.visibility != AnnotationVisibility::Error)
             .map(|a| AnnotationMethod {
                 method_idx: a.method_idx,
                 visibility: a.visibility.to_string(),
