@@ -735,7 +735,7 @@ pub enum AnnotationVisibility {
     VisibilityBuild,
     VisibilityRuntime,
     VisibilitySystem,
-    Error,
+    Unknown,
 }
 
 impl std::fmt::Display for AnnotationVisibility {
@@ -750,7 +750,7 @@ impl AnnotationVisibility {
             AnnotationVisibility::VisibilityBuild => String::from("Build"),
             AnnotationVisibility::VisibilityRuntime => String::from("Runtime"),
             AnnotationVisibility::VisibilitySystem => String::from("System"),
-            AnnotationVisibility::Error => String::from("Error"),
+            AnnotationVisibility::Unknown => String::from("Error"),
         }
     }
 }
@@ -936,9 +936,6 @@ impl Decode for AnnotationElement {
         let (_, n_idx) = Self::read_leb128(byte_view).unwrap();
         let val = EncodedItem::from_bytes(byte_view);
 
-        // if matches!(val.value_type, ValueType::Annotation) {
-        //     EncodedAnnotation::from_bytes(byte_view);
-        // }
         Self {
             name_idx: n_idx,
             value: val,
@@ -961,16 +958,16 @@ impl Decode for EncodedAnnotation {
         let (_, type_idx) = Self::read_leb128(byte_view).unwrap();
         let (_, size) = Self::read_leb128(byte_view).unwrap();
 
-        let mut elems: Vec<AnnotationElement> = vec![];
+        let mut elements: Vec<AnnotationElement> = vec![];
         for _ in 0..size {
             let annotation_element: AnnotationElement = AnnotationElement::from_bytes(byte_view);
-            elems.push(annotation_element);
+            elements.push(annotation_element);
         }
 
         Self {
-            type_idx: type_idx,
-            size: size,
-            elements: elems,
+            type_idx,
+            size,
+            elements,
         }
     }
 }
@@ -990,7 +987,7 @@ impl Decode for AnnotationItem {
             0x00 => AnnotationVisibility::VisibilityBuild,
             0x01 => AnnotationVisibility::VisibilityRuntime,
             0x02 => AnnotationVisibility::VisibilitySystem,
-            _ => AnnotationVisibility::Error,
+            _ => AnnotationVisibility::Unknown,
         };
 
         let enc_annotation: EncodedAnnotation = EncodedAnnotation::from_bytes(byte_view);
@@ -1031,19 +1028,16 @@ impl Decode for AnnotationSetItem {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let s = u32::from_bytes(byte_view);
+        let size = u32::from_bytes(byte_view);
 
-        let mut entrs: Vec<AnnotationOffItem> = vec![];
+        let mut entries: Vec<AnnotationOffItem> = vec![];
 
-        for _ in 0..s {
+        for _ in 0..size {
             let annotation_off_item: AnnotationOffItem = AnnotationOffItem::from_bytes(byte_view);
-            entrs.push(annotation_off_item);
+            entries.push(annotation_off_item);
         }
 
-        Self {
-            size: s,
-            entries: entrs,
-        }
+        Self { size, entries }
     }
 }
 
@@ -1058,11 +1052,11 @@ impl Decode for FieldAnnotation {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let idx = u32::from_bytes(byte_view);
-        let off = u32::from_bytes(byte_view);
+        let field_idx = u32::from_bytes(byte_view);
+        let annotations_off = u32::from_bytes(byte_view);
         Self {
-            field_idx: idx as u32,
-            annotations_off: off,
+            field_idx,
+            annotations_off,
         }
     }
 }
@@ -1078,11 +1072,11 @@ impl Decode for MethodAnnotation {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let idx = u32::from_bytes(byte_view);
-        let off = u32::from_bytes(byte_view);
+        let method_idx = u32::from_bytes(byte_view);
+        let annotations_off = u32::from_bytes(byte_view);
         Self {
-            method_idx: idx as u32,
-            annotations_off: off,
+            method_idx,
+            annotations_off,
         }
     }
 }
@@ -1098,11 +1092,11 @@ impl Decode for ParameterAnnotation {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let idx = u32::from_bytes(byte_view);
-        let off = u32::from_bytes(byte_view);
+        let method_idx = u32::from_bytes(byte_view);
+        let annotations_off = u32::from_bytes(byte_view);
         Self {
-            method_idx: idx as u32,
-            annotations_off: off,
+            method_idx,
+            annotations_off,
         }
     }
 }
@@ -1113,7 +1107,7 @@ pub struct AnnotationsDirectoryItem {
     pub class_annotations_off: u32,
     pub fields_size: u32,
     pub annotated_methods_size: u32,
-    pub annotaded_parameters_size: u32,
+    pub annotated_parameters_size: u32,
     pub field_annotations: Vec<FieldAnnotation>,
     pub method_annotations: Vec<MethodAnnotation>,
     pub parameter_annotations: Vec<ParameterAnnotation>,
@@ -1123,39 +1117,39 @@ impl Decode for AnnotationsDirectoryItem {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let c_annotations_off: u32 = u32::from_bytes(byte_view);
-        let f_size: u32 = u32::from_bytes(byte_view);
-        let an_methods_size: u32 = u32::from_bytes(byte_view);
-        let an_paremeters_size: u32 = u32::from_bytes(byte_view);
+        let class_annotations_off: u32 = u32::from_bytes(byte_view);
+        let fields_size: u32 = u32::from_bytes(byte_view);
+        let annotated_methods_size: u32 = u32::from_bytes(byte_view);
+        let annotated_parameters_size: u32 = u32::from_bytes(byte_view);
 
-        let mut f_annotations: Vec<FieldAnnotation> = vec![];
-        let mut m_annotations: Vec<MethodAnnotation> = vec![];
-        let mut p_annotations: Vec<ParameterAnnotation> = vec![];
+        let mut field_annotations: Vec<FieldAnnotation> = vec![];
+        let mut method_annotations: Vec<MethodAnnotation> = vec![];
+        let mut parameter_annotations: Vec<ParameterAnnotation> = vec![];
 
-        for _ in 0..f_size {
+        for _ in 0..fields_size {
             let field_annotation: FieldAnnotation = FieldAnnotation::from_bytes(byte_view);
-            f_annotations.push(field_annotation);
+            field_annotations.push(field_annotation);
         }
 
-        for _ in 0..an_methods_size {
+        for _ in 0..annotated_methods_size {
             let method_annotation: MethodAnnotation = MethodAnnotation::from_bytes(byte_view);
-            m_annotations.push(method_annotation);
+            method_annotations.push(method_annotation);
         }
 
-        for _ in 0..an_paremeters_size {
+        for _ in 0..annotated_parameters_size {
             let parameter_annotation: ParameterAnnotation =
                 ParameterAnnotation::from_bytes(byte_view);
-            p_annotations.push(parameter_annotation);
+            parameter_annotations.push(parameter_annotation);
         }
 
         Self {
-            class_annotations_off: c_annotations_off,
-            fields_size: f_size,
-            annotated_methods_size: an_methods_size,
-            annotaded_parameters_size: an_paremeters_size,
-            field_annotations: f_annotations,
-            method_annotations: m_annotations,
-            parameter_annotations: p_annotations,
+            class_annotations_off,
+            fields_size,
+            annotated_methods_size,
+            annotated_parameters_size,
+            field_annotations,
+            method_annotations,
+            parameter_annotations,
         }
     }
 }
