@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -269,10 +269,7 @@ impl Decode for StringEntry {
 
 #[derive(Debug, Clone)]
 struct ClassRef(Class, String);
-use std::{
-    ops::Deref,
-    sync::Arc,
-};
+use std::{ops::Deref, sync::Arc};
 
 impl Deref for ClassRef {
     type Target = Class;
@@ -406,8 +403,10 @@ impl EncodedItem {
     pub fn try_get_string<'a>(&self, file: &'a DexFile) -> Option<&'a str> {
         file.get_string(self.get_string_id() as usize)
     }
-
-    pub fn to_string(&self, file: &DexFile) -> String {
+    pub fn to_string_with_string_indexer<F>(&self, get_string: F) -> String
+    where
+        F: Fn(usize) -> String,
+    {
         match self.value_type {
             ValueType::Byte => format!("0x{:2x}", self.try_get_value::<u8>().unwrap()),
             ValueType::Short => format!("{}", self.try_get_value::<u16>().unwrap()),
@@ -418,7 +417,7 @@ impl EncodedItem {
             ValueType::Double => format!("{:?}", self),
             ValueType::MethodType => format!("{:?}", self),
             ValueType::MethodHandle => format!("{:?}", self),
-            ValueType::String => format!("\"{}\"", self.try_get_string(file).unwrap_or("")),
+            ValueType::String => format!("\"{}\"", get_string(self.get_string_id() as usize)),
             ValueType::Type => format!("{:?}", self),
             ValueType::Field => format!("{:?}", self),
             ValueType::Method => format!("{:?}", self),
@@ -428,6 +427,13 @@ impl EncodedItem {
             ValueType::Null => format!("null"),
             ValueType::Boolean => format!("{}", self.try_get_value::<bool>().unwrap()),
         }
+    }
+    pub fn to_string(&self, file: &DexFile) -> String {
+        self.to_string_with_string_indexer(|idx| {
+            file.get_string(idx as usize)
+                .unwrap_or("STRING_NOT_FOUND")
+                .to_string()
+        })
     }
 }
 
@@ -474,7 +480,7 @@ impl Decode for EncodedItem {
                 values: vec![],
                 inner: Some(encoded_array),
             }
-        } else if matches!(value_type, ValueType::Annotation) {           
+        } else if matches!(value_type, ValueType::Annotation) {
             EncodedItem {
                 value_arg,
                 value_type,
@@ -749,13 +755,13 @@ impl AnnotationVisibility {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize,)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AnnotationElementsData {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize,)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Annotation {
     pub visibility: AnnotationVisibility,
     pub type_idx: u64,
@@ -763,15 +769,14 @@ pub struct Annotation {
     pub elements: Vec<AnnotationElementsData>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize,)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AnnotationMethod {
     pub method_idx: u32,
     pub visibility: AnnotationVisibility,
     pub type_idx: u64,
     pub class_name: String,
-    pub elements: Vec<AnnotationElementsData>,    
+    pub elements: Vec<AnnotationElementsData>,
 }
-
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Class {
@@ -918,7 +923,7 @@ impl Class {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone,serde::Serialize, serde::Deserialize,  PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct AnnotationElement {
     pub name_idx: u64,
     pub value: EncodedItem,
@@ -926,7 +931,7 @@ pub struct AnnotationElement {
 
 impl Decode for AnnotationElement {
     type DecodableUnit = Self;
-    
+
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
         let (_, n_idx) = Self::read_leb128(byte_view).unwrap();
         let val = EncodedItem::from_bytes(byte_view);
@@ -934,9 +939,10 @@ impl Decode for AnnotationElement {
         // if matches!(val.value_type, ValueType::Annotation) {
         //     EncodedAnnotation::from_bytes(byte_view);
         // }
-        Self { name_idx: n_idx, value: val}
-        
-
+        Self {
+            name_idx: n_idx,
+            value: val,
+        }
     }
 }
 
@@ -944,13 +950,13 @@ impl Decode for AnnotationElement {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EncodedAnnotation {
     pub type_idx: u64,
-    pub size: u64, 
+    pub size: u64,
     pub elements: Vec<AnnotationElement>,
 }
 
 impl Decode for EncodedAnnotation {
     type DecodableUnit = Self;
-    
+
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
         let (_, type_idx) = Self::read_leb128(byte_view).unwrap();
         let (_, size) = Self::read_leb128(byte_view).unwrap();
@@ -961,12 +967,11 @@ impl Decode for EncodedAnnotation {
             elems.push(annotation_element);
         }
 
-        Self { 
+        Self {
             type_idx: type_idx,
             size: size,
             elements: elems,
         }
-
     }
 }
 
@@ -981,16 +986,19 @@ impl Decode for AnnotationItem {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let vis:AnnotationVisibility = match u8::from_bytes(byte_view) {
+        let vis: AnnotationVisibility = match u8::from_bytes(byte_view) {
             0x00 => AnnotationVisibility::VisibilityBuild,
             0x01 => AnnotationVisibility::VisibilityRuntime,
             0x02 => AnnotationVisibility::VisibilitySystem,
             _ => AnnotationVisibility::Error,
         };
-        
+
         let enc_annotation: EncodedAnnotation = EncodedAnnotation::from_bytes(byte_view);
-        
-        Self { visibility: vis, annotation: enc_annotation }
+
+        Self {
+            visibility: vis,
+            annotation: enc_annotation,
+        }
     }
 }
 
@@ -1006,7 +1014,9 @@ impl Decode for AnnotationOffItem {
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
         let off = u32::from_bytes(byte_view);
 
-        Self { annotation_off: off }
+        Self {
+            annotation_off: off,
+        }
     }
 }
 
@@ -1029,8 +1039,8 @@ impl Decode for AnnotationSetItem {
             let annotation_off_item: AnnotationOffItem = AnnotationOffItem::from_bytes(byte_view);
             entrs.push(annotation_off_item);
         }
-        
-        Self{
+
+        Self {
             size: s,
             entries: entrs,
         }
@@ -1109,11 +1119,11 @@ pub struct AnnotationsDirectoryItem {
     pub parameter_annotations: Vec<ParameterAnnotation>,
 }
 
-impl Decode for AnnotationsDirectoryItem{
+impl Decode for AnnotationsDirectoryItem {
     type DecodableUnit = Self;
 
     fn from_bytes<R: Read + Seek>(byte_view: &mut R) -> Self {
-        let c_annotations_off :u32 = u32::from_bytes(byte_view);
+        let c_annotations_off: u32 = u32::from_bytes(byte_view);
         let f_size: u32 = u32::from_bytes(byte_view);
         let an_methods_size: u32 = u32::from_bytes(byte_view);
         let an_paremeters_size: u32 = u32::from_bytes(byte_view);
@@ -1132,12 +1142,13 @@ impl Decode for AnnotationsDirectoryItem{
             m_annotations.push(method_annotation);
         }
 
-        for _ in 0..an_paremeters_size{
-            let parameter_annotation: ParameterAnnotation = ParameterAnnotation::from_bytes(byte_view);
+        for _ in 0..an_paremeters_size {
+            let parameter_annotation: ParameterAnnotation =
+                ParameterAnnotation::from_bytes(byte_view);
             p_annotations.push(parameter_annotation);
         }
 
-        Self { 
+        Self {
             class_annotations_off: c_annotations_off,
             fields_size: f_size,
             annotated_methods_size: an_methods_size,
@@ -1148,7 +1159,6 @@ impl Decode for AnnotationsDirectoryItem{
         }
     }
 }
-
 
 #[repr(C)]
 #[derive(Debug)]
@@ -1644,5 +1654,3 @@ impl ToString for StringType {
         }
     }
 }
-
-

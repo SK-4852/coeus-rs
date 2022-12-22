@@ -175,193 +175,149 @@ pub fn parse_dex_buf(
                 interfaces
             }
         };
+        class_data_cursor
+            .seek(SeekFrom::Start(class.annotations_off as u64))
+            .unwrap();
+        let annotations_directory_item =
+            AnnotationsDirectoryItem::from_bytes(&mut class_data_cursor);
 
-        let annotations: Vec<Annotation> = {
-            if class.annotations_off == 0 {
-                vec![]
-            } else {
+        let annotations: Vec<Annotation> = 'annotations: {
+            if class.annotations_off == 0 || annotations_directory_item.class_annotations_off == 0 {
+                break 'annotations vec![];
+            }
+
+            class_data_cursor
+                .seek(SeekFrom::Start(
+                    annotations_directory_item.class_annotations_off as u64,
+                ))
+                .unwrap();
+            let annotation_set_item: AnnotationSetItem =
+                AnnotationSetItem::from_bytes(&mut class_data_cursor);
+
+            let mut annotations: Vec<Annotation> = vec![];
+            for annotation in &annotation_set_item.entries {
                 class_data_cursor
-                    .seek(SeekFrom::Start(class.annotations_off as u64))
+                    .seek(SeekFrom::Start(annotation.annotation_off as u64))
                     .unwrap();
-                let annotations_directory_item = AnnotationsDirectoryItem::from_bytes(&mut class_data_cursor);
 
-                if annotations_directory_item.class_annotations_off == 0 {
-                    vec![]
-                } else {
-                
-                    class_data_cursor
-                        .seek(SeekFrom::Start(annotations_directory_item.class_annotations_off as u64))
-                        .unwrap();
-                    let annotation_set_item: AnnotationSetItem = AnnotationSetItem::from_bytes(&mut class_data_cursor);
-                    
-                    let mut annotations: Vec<Annotation> = vec![];
-                    for i in 0..annotation_set_item.size {
+                let annotation_item: AnnotationItem =
+                    AnnotationItem::from_bytes(&mut class_data_cursor);
+                let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
 
-                        class_data_cursor
-                            .seek(SeekFrom::Start(annotation_set_item.entries[i as usize].annotation_off as u64))
-                            .unwrap();
+                let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
+                for annotation_element in &encoded_annotation.elements {
+                    let name = annotation_element.name_idx;
+                    let encoded_item = &annotation_element.value;
 
-                        let annotation_item: AnnotationItem = AnnotationItem::from_bytes(&mut class_data_cursor);
-                        let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
-                        let annotation_elements: Vec<AnnotationElement> = encoded_annotation.elements;
+                    //TODO: check other values and subannotations
+                    let val = encoded_item.to_string_with_string_indexer(|idx| {
+                        get_string_from_idx(idx, &strings).unwrap_or_else(|| String::new())
+                    });
 
-                        let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
-                        for j in 0..encoded_annotation.size {
-                            let name= annotation_elements[j as usize].name_idx;
-                            let encoded_item = annotation_elements[j as usize].value.clone();
-                            
-                                //TODO: check other values and subannotations
-                            let val = match encoded_item.value_type {
-                                ValueType::Byte => format!("0x{:2x}", encoded_item.try_get_value::<u8>().unwrap()),
-                                ValueType::Short => format!("{}", encoded_item.try_get_value::<u16>().unwrap()),
-                                ValueType::Char => format!("'{}'", encoded_item.try_get_value::<char>().unwrap()),
-                                ValueType::Int => format!("{}", encoded_item.try_get_value::<u32>().unwrap()),
-                                ValueType::Long => format!("{}", encoded_item.try_get_value::<u64>().unwrap()),
-                                ValueType::String => get_string_from_idx(encoded_item.get_string_id() as u16, &strings).unwrap(),
-                                ValueType::Float => format!("{:?}", encoded_item),
-                                ValueType::Double => format!("{:?}", encoded_item),
-                                ValueType::MethodType => format!("{:?}", encoded_item),
-                                ValueType::MethodHandle => format!("{:?}", encoded_item),
-                                ValueType::Type => format!("{:?}", encoded_item),
-                                ValueType::Field => format!("{:?}", encoded_item),
-                                ValueType::Method => format!("{:?}", encoded_item),
-                                ValueType::Enum => format!("{:?}", encoded_item),
-                                ValueType::Array => format!("{:?}", encoded_item),
-                                ValueType::Annotation => format!("{:?}", encoded_item),
-                                ValueType::Null => format!("null"),
-                                ValueType::Boolean => format!("{}", encoded_item.try_get_value::<bool>().unwrap()),
-                            };
-                        
-                            let data = AnnotationElementsData {
-                                name: get_string_from_idx(name as u16, &strings)
-                                .unwrap_or_else(|| {
-                                    log::error!("Could not resolve class name");
-                                    "-UNKONWN-".to_string()
-                                }),
-                                value: val,
-                            };
-                            
-                            annotation_elements_data.push(data);
-                        
-                        }
-
-                        let class_name = get_string_from_idx(types[encoded_annotation.type_idx as usize] as u16, &strings)
-                        .unwrap_or_else(|| {
+                    let data = AnnotationElementsData {
+                        name: get_string_from_idx(name as u16, &strings).unwrap_or_else(|| {
                             log::error!("Could not resolve class name");
-                            "-UNKONWN- Class".to_string()
-                        });
-                            
-                        let annotation: Annotation = Annotation {
-                            visibility: annotation_item.visibility,
-                            type_idx: encoded_annotation.type_idx,
-                            class_name: class_name,
-                            elements: annotation_elements_data,
-                        };
+                            "-UNKONWN-".to_string()
+                        }),
+                        value: val,
+                    };
 
-                        annotations.push(annotation);
-                    }
-                    
-                    annotations
-                }  
+                    annotation_elements_data.push(data);
+                }
+
+                let class_name = get_string_from_idx(
+                    types[encoded_annotation.type_idx as usize] as u16,
+                    &strings,
+                )
+                .unwrap_or_else(|| {
+                    log::error!("Could not resolve class name");
+                    "-UNKONWN- Class".to_string()
+                });
+
+                let annotation: Annotation = Annotation {
+                    visibility: annotation_item.visibility,
+                    type_idx: encoded_annotation.type_idx,
+                    class_name,
+                    elements: annotation_elements_data,
+                };
+
+                annotations.push(annotation);
             }
+
+            annotations
         };
 
-        let method_annotations: Vec<AnnotationMethod> = {
-            if class.annotations_off == 0 {
-                vec![]
-            } else {
+        let method_annotations: Vec<AnnotationMethod> = 'method_annotations: {
+            if class.annotations_off == 0 || annotations_directory_item.annotated_methods_size == 0
+            {
+                break 'method_annotations vec![];
+            }
+
+            let mut m_annotations: Vec<AnnotationMethod> = vec![];
+
+            for method_annotation in &annotations_directory_item.method_annotations {
+                let m_annotations_off = method_annotation.annotations_off;
+
                 class_data_cursor
-                    .seek(SeekFrom::Start(class.annotations_off as u64))
+                    .seek(SeekFrom::Start(m_annotations_off as u64))
                     .unwrap();
-                let annotations_directory_item = AnnotationsDirectoryItem::from_bytes(&mut class_data_cursor);
 
-                if annotations_directory_item.annotated_methods_size == 0 {
-                    vec![]
-                } else {
-                    let mut m_annotations: Vec<AnnotationMethod> = vec![];
+                let annotation_set_item = AnnotationSetItem::from_bytes(&mut class_data_cursor);
 
-                    for i in 0..annotations_directory_item.annotated_methods_size {
-                        let m_annotations_off = annotations_directory_item.method_annotations[i as usize].annotations_off;
+                for j in 0..annotation_set_item.size {
+                    class_data_cursor
+                        .seek(SeekFrom::Start(
+                            annotation_set_item.entries[j as usize].annotation_off as u64,
+                        ))
+                        .unwrap();
 
-                        class_data_cursor
-                            .seek(SeekFrom::Start(m_annotations_off as u64 ))
-                            .unwrap();
+                    let annotation_item: AnnotationItem =
+                        AnnotationItem::from_bytes(&mut class_data_cursor);
+                    let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
 
-                        let annotation_set_item = AnnotationSetItem::from_bytes(&mut class_data_cursor);
-                        
-                        for j in 0..annotation_set_item.size {
+                    let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
+                    for annotation in &encoded_annotation.elements {
+                        let name = annotation.name_idx;
+                        let encoded_item = &annotation.value;
 
-                            class_data_cursor
-                                .seek(SeekFrom::Start(annotation_set_item.entries[j as usize].annotation_off as u64))
-                                .unwrap();
+                        //TODO: check other values and subannotations
+                        let val = encoded_item.to_string_with_string_indexer(|idx| {
+                            get_string_from_idx(idx, &strings).unwrap_or_else(|| String::new())
+                        });
 
-                            let annotation_item: AnnotationItem = AnnotationItem::from_bytes(&mut class_data_cursor);
-                            let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
-                            let annotation_elements: Vec<AnnotationElement> = encoded_annotation.elements;
-                            
-                            let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
-                            for k in 0..encoded_annotation.size {
-                                let name= annotation_elements[k as usize].name_idx;
-                                let encoded_item = annotation_elements[k as usize].value.clone();
-                                
-                                //TODO: check other values and subannotations
-                                let val = match encoded_item.value_type {
-                                    ValueType::Byte => format!("0x{:2x}", encoded_item.try_get_value::<u8>().unwrap()),
-                                    ValueType::Short => format!("{}", encoded_item.try_get_value::<u16>().unwrap()),
-                                    ValueType::Char => format!("'{}'", encoded_item.try_get_value::<char>().unwrap()),
-                                    ValueType::Int => format!("{}", encoded_item.try_get_value::<u32>().unwrap()),
-                                    ValueType::Long => format!("{}", encoded_item.try_get_value::<u64>().unwrap()),
-                                    ValueType::String => get_string_from_idx(encoded_item.get_string_id() as u16, &strings).unwrap(),
-                                    ValueType::Float => format!("{:?}", encoded_item),
-                                    ValueType::Double => format!("{:?}", encoded_item),
-                                    ValueType::MethodType => format!("{:?}", encoded_item),
-                                    ValueType::MethodHandle => format!("{:?}", encoded_item),
-                                    ValueType::Type => format!("{:?}", encoded_item),
-                                    ValueType::Field => format!("{:?}", encoded_item),
-                                    ValueType::Method => format!("{:?}", encoded_item),
-                                    ValueType::Enum => format!("{:?}", encoded_item),
-                                    ValueType::Array => format!("{:?}", encoded_item),
-                                    ValueType::Annotation => format!("{:?}", encoded_item),
-                                    ValueType::Null => format!("null"),
-                                    ValueType::Boolean => format!("{}", encoded_item.try_get_value::<bool>().unwrap()),
-                                };
-    
-                                let data = AnnotationElementsData {
-                                    name: get_string_from_idx(name as u16, &strings)
-                                    .unwrap_or_else(|| {
-                                        log::error!("Could not resolve class name");
-                                        "-UNKONWN-".to_string()
-                                    }),
-                                    value: val,
-                                };
-                                annotation_elements_data.push(data);
-                            }
-                            
-                            let class_name = get_string_from_idx(types[encoded_annotation.type_idx as usize] as u16, &strings)
-                                .unwrap_or_else(|| {
-                                    log::error!("Could not resolve class name");
-                                    "-UNKONWN- Class".to_string()
-                                });
-                            
-                             
-                            let m_annotation: AnnotationMethod = AnnotationMethod {
-                                method_idx: annotations_directory_item.method_annotations[i as usize].method_idx,
-                                visibility: annotation_item.visibility,
-                                type_idx: encoded_annotation.type_idx,
-                                class_name: class_name,
-                                elements: annotation_elements_data,
-                            };    
-                            
-                            m_annotations.push(m_annotation);
-                        }
-
+                        let data = AnnotationElementsData {
+                            name: get_string_from_idx(name as u16, &strings).unwrap_or_else(|| {
+                                log::error!("Could not resolve class name");
+                                "-UNKONWN-".to_string()
+                            }),
+                            value: val,
+                        };
+                        annotation_elements_data.push(data);
                     }
-                    
-                    m_annotations
-                }  
-            }
-        };
 
+                    let class_name = get_string_from_idx(
+                        types[encoded_annotation.type_idx as usize] as u16,
+                        &strings,
+                    )
+                    .unwrap_or_else(|| {
+                        log::error!("Could not resolve class name");
+                        "-UNKONWN- Class".to_string()
+                    });
+
+                    let m_annotation: AnnotationMethod = AnnotationMethod {
+                        method_idx: method_annotation.method_idx,
+                        visibility: annotation_item.visibility,
+                        type_idx: encoded_annotation.type_idx,
+                        class_name,
+                        elements: annotation_elements_data,
+                    };
+
+                    m_annotations.push(m_annotation);
+                }
+            }
+
+            m_annotations
+        };
 
         let mut the_class = Class {
             dex_identifier: format!("{:02x?}", config.signature),
@@ -378,9 +334,9 @@ pub fn parse_dex_buf(
             codes: vec![],
             static_fields,
             interfaces,
-            annotations_off : class.annotations_off,
+            annotations_off: class.annotations_off,
             annotations,
-            method_annotations: method_annotations,
+            method_annotations,
         };
 
         //todo we need the native functions (NO_INDEX since no instructions)
