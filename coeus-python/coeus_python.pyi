@@ -237,3 +237,10 @@ class AnalyzeObject:
         """Access the resource specified by `name`"""
     def find_dynamically_registered_functions(self, regex: str, libName: str) -> list[Evidence]:
         """Find dynamically registered functions in `libName`, matching the name given by `regex`."""
+    def get_file_names(self) -> list[str]:
+        """Get all file names"""    
+    def get_dex_names(self) -> list[str]:
+        """Get all dex file names"""
+    def get_primary_dex(self) -> list[Dex]:
+        """Get the primary dex files"""
+    
