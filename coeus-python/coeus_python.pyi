@@ -243,6 +243,6 @@ class AnalyzeObject:
         """Get all dex file names"""
     def get_primary_dex(self) -> list[Dex]:
         """Get the primary dex files"""
-    def get_file(self, name) -> PyBytes:
+    def get_file(self, name) -> bytes:
         """Get file bytes"""
     
