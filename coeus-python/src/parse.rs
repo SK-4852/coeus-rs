@@ -4,11 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::{
-    sync::Arc,
-    io::Cursor,
-};
-use abxml::visitor::{Executor, ModelVisitor, XmlVisitor};
+use std::sync::Arc;
 use coeus::coeus_analysis::analysis::dex::get_native_methods;
 use coeus::coeus_analysis::analysis::{
     find_any, find_classes, find_fields, find_methods, ALL_TYPES,
@@ -116,12 +112,8 @@ impl AnalyzeObject {
 		let bin_object = self.files.binaries.get(name).unwrap();
 
 		if name.ends_with(".xml") {
-		    let modelvisitor = ModelVisitor::default();
-			let mut visitor = XmlVisitor::new(modelvisitor.get_resources());
-			let _ = Executor::xml(Cursor::new(&bin_object.data()), &mut visitor);
-			let _file_content = visitor.into_string().unwrap_or_else(|_| "".to_string());
-			let file_content = _file_content.clone();
-            let result = file_content.as_bytes();
+            let xml = self.files.decode_resource(bin_object.data()).unwrap();
+            let result = xml.as_bytes();
             PyBytes::new(py, &result).into()
 		}
 		else {
@@ -129,8 +121,6 @@ impl AnalyzeObject {
             PyBytes::new(py, &result).into()
 		}
 
-		//let result = bin_object.data();
-        //PyBytes::new(py, &result).into()
     }
 
     /// Find all dynamically registered native functions
