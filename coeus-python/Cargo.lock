@@ -164,6 +164,7 @@ dependencies = [
 name = "coeus-python"
 version = "0.1.1"
 dependencies = [
+ "abxml",
  "coeus",
  "pyo3",
  "rayon",
