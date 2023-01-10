@@ -5,7 +5,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::sync::Arc;
-
 use coeus::coeus_analysis::analysis::dex::get_native_methods;
 use coeus::coeus_analysis::analysis::{
     find_any, find_classes, find_fields, find_methods, ALL_TYPES,
@@ -14,16 +13,10 @@ use coeus::coeus_analysis::analysis::{
 use coeus::coeus_models::models::{AndroidManifest, DexFile, Files};
 use pyo3::exceptions::{PyIOError, PyRuntimeError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use regex::Regex;
 
 use crate::analysis::Method;
-
-#[pyclass]
-/// Abstract object holding all resources found. Use this as the root object for further analysis.
-#[pyo3(text_signature = "(archive, build_graph, max_depth, /)")]
-pub struct AnalyzeObject {
-    pub(crate) files: Files,
-}
 
 #[pyclass]
 #[derive(Clone)]
@@ -46,6 +39,31 @@ impl Manifest {
     pub fn get_xml(&self) -> String {
         self.manifest_content.clone()
     }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct Dex {
+    _file: Arc<DexFile>,
+    dex_name: String,
+    identifier: String,
+}
+
+#[pymethods]
+impl Dex {
+    pub fn get_name(&self) -> String {
+        self.dex_name.clone()
+    }
+    pub fn get_identifier(&self) -> String {
+        self.identifier.clone()
+    }
+}
+
+#[pyclass]
+/// Abstract object holding all resources found. Use this as the root object for further analysis.
+#[pyo3(text_signature = "(archive, build_graph, max_depth, /)")]
+pub struct AnalyzeObject {
+    pub(crate) files: Files,
 }
 
 #[pymethods]
@@ -85,6 +103,22 @@ impl AnalyzeObject {
             .collect()
     }
 
+    pub fn get_file(&self, py: Python, name: &str) -> PyObject {
+		let mut _file_content: String;
+		let bin_object = self.files.binaries.get(name).unwrap();
+
+		if name.ends_with(".xml") {
+            let xml = self.files.decode_resource(bin_object.data()).unwrap();
+            let result = xml.as_bytes();
+            PyBytes::new(py, &result).into()
+		}
+		else {
+			let result = bin_object.data();
+            PyBytes::new(py, &result).into()
+		}
+
+    }
+
     /// Find all dynamically registered native functions
     pub fn find_dynamically_registered_functions(
         &self,
@@ -108,6 +142,38 @@ impl AnalyzeObject {
         .into_iter()
         .map(|evidence| crate::analysis::Evidence { evidence })
         .collect()
+    }
+
+    pub fn get_file_names(&self) -> Vec<String> {
+		let mut results = vec![];
+        for key in self.files.binaries.keys() {
+            results.push(key.clone());
+        }
+        results	
+	}
+
+    pub fn get_dex_names(&self) -> Vec<String> {
+	    let mut results = vec![];
+        for md in &self.files.multi_dex {
+            results.push(md.primary.file_name.clone());
+            for sec in md.secondary.iter() {
+                results.push(sec.file_name.clone());
+            }
+        }
+        results
+	}
+
+        
+    pub fn get_primary_dex(&self) -> Vec<Dex> {
+        self.files
+			.multi_dex
+			.iter()
+            .map(|a| Dex {
+                _file: a.primary.clone(),
+                dex_name: a.primary.get_dex_name().to_string().clone(),
+                identifier: a.primary.identifier.clone(),
+            })
+            .collect()
     }
 
     /// Find all functions in the dex file having the modifier `native`

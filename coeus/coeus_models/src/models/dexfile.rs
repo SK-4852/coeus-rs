@@ -6,6 +6,7 @@
 
 use coeus_macros::iterator;
 use std::{collections::HashMap, sync::Arc};
+use std::path::Path;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
@@ -63,6 +64,14 @@ impl DexFile {
             .map(|se| se.to_str().ok())
             .flatten()
     }
+
+    pub fn get_dex_name(&self) -> &str {
+		Path::new(&self.file_name)
+		.file_name()
+		.unwrap()
+		.to_str()
+		.unwrap()
+	}
 
     pub fn get_type_name<T>(&self, type_idx: T) -> Option<&str>
     where
