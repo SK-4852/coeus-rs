@@ -103,12 +103,8 @@ impl AnalyzeObject {
             .collect()
     }
 
-    pub fn get_file(&self, name: &str) -> PyObject {
-        let gil = Python::acquire_gil();
-        let py = gil.python();
-
+    pub fn get_file(&self, py: Python, name: &str) -> PyObject {
 		let mut _file_content: String;
-        
 		let bin_object = self.files.binaries.get(name).unwrap();
 
 		if name.ends_with(".xml") {
