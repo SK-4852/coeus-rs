@@ -150,10 +150,15 @@ pub fn extract_zip(
         }
 
         if check_for_dex_signature(ptr) {
+            let dex_bytes = zip_bytes.clone();
             dex_jobs.push(std::thread::spawn(move || {
                 let array_view = ArrayView::new(zip_bytes.as_slice());
                 found_dex(&file_name, &array_view, should_build_graph)
             }));
+            other_files.insert(
+                file.name().to_string(),
+                Arc::new(BinaryObject::new(dex_bytes)),
+            );
         } else if (max_depth == 0 || depth <= max_depth) && check_for_zip_signature(ptr) {
             let zip_bytes = zip_bytes;
             let array_view = ArrayView::new(zip_bytes.as_slice());
