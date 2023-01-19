@@ -58,6 +58,11 @@ class VmResult:
         """Cast the VmResult to a python native type"""
 class DexClassObject:
     pass
+class Dex:
+    def get_name(self) -> str:
+        """Get name of the Dexfile"""
+    def get_identifier(self) -> str:
+        """Get identifier of Dexfile"""
 class DexString:
     def content(self) -> str:
         """Return the content of this String"""
