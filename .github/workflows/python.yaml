@@ -14,25 +14,26 @@ env:
 
 jobs:
   macos:
-    runs-on: [self-hosted, macOS]
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64
+          architecture: aarch64
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           profile: minimal
           default: true
-      - name: Build wheels - x86_64
+      - name: Build wheels - aarch64
         uses: messense/maturin-action@v1
         with:
-          target: x86_64
+          target: aarch64
           args: --release --out dist --sdist
           maturin-version: "v0.14.10"
+          working-directory: "coeus-python"
       - name: Build wheels - universal2
         uses: messense/maturin-action@v1
         with:
@@ -98,6 +99,7 @@ jobs:
           manylinux: auto
           args: --release --out dist
           maturin-version: "v0.14.10"
+          working-directory: "coeus-python"
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -121,6 +123,7 @@ jobs:
           manylinux: auto
           args: --release --out dist
           maturin-version: "v0.14.10"
+          working-directory: "coeus-python"
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -147,6 +150,7 @@ jobs:
           manylinux: musllinux_1_2
           args: --release --out dist
           maturin-version: "v0.14.10"
+          working-directory: "coeus-python"
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -174,6 +178,7 @@ jobs:
           manylinux: musllinux_1_2
           args: --release --out dist
           maturin-version: "v0.14.10"
+          working-directory: "coeus-python"
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
