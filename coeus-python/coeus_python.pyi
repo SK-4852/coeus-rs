@@ -8,6 +8,23 @@
 from tokenize import String
 from typing import Any, Optional
 from xmlrpc.client import boolean
+
+class Debugger:
+    def __init__(self, host:str, port:int):
+        """Init a new Debugger and try to connect over TCP"""
+    def set_breakpoint(self, method: Method, code_index: int):
+        """Sets a breakpoint on the specified method at the specified code_index. The index is normally the instruction offset"""
+    def resume(self):
+        """Resume a stopped debugger"""
+    def wait_for_package(self) -> DebuggerStackFrame:
+        """Performs a blocking wait for a debugger package and tries to get the stackframe from it"""
+class DebuggerStackFrame:
+    def get_values_for(self, debugger: Debugger, method: Method) -> list[StackValue]:
+        """Get the values of the current stack frame"""
+class StackValue:
+    def get_value(self, debugger: Debugger) -> Any:
+        """Get the value from the frame. If it is a primitive type or a string we get the actual value, else we just get the VM object reference id"""
+
 class Flow:
     def __init__(self, m: Method):
         """Construct a new static analysis flow"""

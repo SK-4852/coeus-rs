@@ -8,10 +8,11 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["emulation", "models", "parse", "analysis", "macros"]
+default = ["emulation", "models", "parse", "analysis", "macros", "debug"]
 emulation = ["coeus_emulation"]
 macros = ["coeus_macros"]
 models = ["coeus_models"]
+debug = ["coeus_debug", "models"]
 analysis = ["coeus_analysis"]
 parse = ["coeus_parse"]
 # graphviz = ["coeus_parse/graphviz"]
@@ -25,6 +26,7 @@ coeus_analysis= {path = "./coeus_analysis", optional = true}
 coeus_macros = {path = "./coeus_macros", optional = true}
 coeus_models = {path = "./coeus_models", optional = true}
 coeus_parse = {path = "./coeus_parse", optional = true}
+coeus_debug = {path = "./coeus_debug", optional = true}
 
 [build-dependencies]
 built = "0.5.1"
