@@ -176,6 +176,8 @@ class Class:
         """Get annotations"""
     def get_method_annotations(self) -> list[AnnotationMethod]:
         """Get method annotations"""
+    def get_field_annotations(self) -> list[AnnotationField]:
+        """Get field annotations"""
 
 class Annotation:
     def get_visibility(self) -> str:
@@ -193,6 +195,16 @@ class AnnotationElement:
 
 class AnnotationMethod:
     def get_method_idx(self) -> int:
+        """Get method index"""
+    def get_visibility(self) -> str:
+        """Get the visibility of the annotation"""
+    def get_classname(self) -> str:
+        """Get the class name of the annotation"""
+    def get_elements(self) -> list[AnnotationElement]:
+        """Get all annotation elements"""
+
+class AnnotationField:
+    def get_field_idx(self) -> int:
         """Get method index"""
     def get_visibility(self) -> str:
         """Get the visibility of the annotation"""

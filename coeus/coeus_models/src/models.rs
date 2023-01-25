@@ -776,6 +776,15 @@ pub struct AnnotationMethod {
     pub type_idx: u64,
     pub class_name: String,
     pub elements: Vec<AnnotationElementsData>,
+
+}
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct AnnotationField {
+    pub field_idx: u32,
+    pub visibility: AnnotationVisibility,
+    pub type_idx: u64,
+    pub class_name: String,
+    pub elements: Vec<AnnotationElementsData>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -789,6 +798,7 @@ pub struct Class {
     pub annotations_off: u32,
     pub annotations: Vec<Annotation>,
     pub method_annotations: Vec<AnnotationMethod>,
+    pub field_annotations: Vec<AnnotationField>,
     #[serde(skip_serializing)]
     pub class_data: Option<ClassData>,
     // #[serde(skip_serializing)]
@@ -820,6 +830,7 @@ impl Class {
             annotations_off: 0,
             annotations: vec![],
             method_annotations: vec![],
+            field_annotations: vec![],
             class_data: None,
             codes: vec![],
             static_fields: vec![],

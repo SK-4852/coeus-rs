@@ -152,13 +152,16 @@ impl AnalyzeObject {
         results	
 	}
 
-    pub fn get_dex_names(&self) -> Vec<String> {
+    pub fn get_dex_names(&self) -> Vec<&String> {
 	    let mut results = vec![];
+        
         for md in &self.files.multi_dex {
-            results.push(md.primary.file_name.clone());
-            for sec in md.secondary.iter() {
-                results.push(sec.file_name.clone());
-            }
+            results.push(&md.primary.file_name);
+            let res: Vec<&String> = md.secondary
+                .iter()
+                .map(|sec| &sec.file_name)
+                .collect();
+            results.extend(res);
         }
         results
 	}

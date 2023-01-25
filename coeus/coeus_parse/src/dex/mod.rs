@@ -127,6 +127,7 @@ pub fn parse_dex_buf(
                 annotations_off: class.annotations_off,
                 annotations: vec![],
                 method_annotations: vec![],
+                field_annotations: vec![],
             });
             if let Ok(mut ret_classes) = vec_lock.lock() {
                 ret_classes.push(the_class.clone());
@@ -177,10 +178,13 @@ pub fn parse_dex_buf(
         };
         let annotations;
         let method_annotations;
+        let field_annotations: Vec<AnnotationField>;
 
         if class.annotations_off == 0 {
             annotations = vec![];
             method_annotations = vec![];
+            field_annotations = vec![];
+
         } else {
             class_data_cursor
                 .seek(SeekFrom::Start(class.annotations_off as u64))
@@ -330,6 +334,83 @@ pub fn parse_dex_buf(
 
                 m_annotations
             };
+
+            field_annotations = 'field_annotations: {
+                if annotations_directory_item.class_annotations_off == 0 {
+                    break 'field_annotations vec![];
+                }
+
+                class_data_cursor
+                    .seek(SeekFrom::Start(class.annotations_off as u64))
+                    .unwrap();
+
+                let mut f_annotations: Vec<AnnotationField> = vec![];
+
+                for field_annotation in &annotations_directory_item.field_annotations {
+                    let f_annotations_off = field_annotation.annotations_off;
+
+                    class_data_cursor
+                        .seek(SeekFrom::Start(f_annotations_off as u64))
+                        .unwrap();
+
+                    let annotation_set_item = AnnotationSetItem::from_bytes(&mut class_data_cursor);
+
+                    for j in 0..annotation_set_item.size {
+                        class_data_cursor
+                            .seek(SeekFrom::Start(
+                                annotation_set_item.entries[j as usize].annotation_off as u64,
+                            ))
+                            .unwrap();
+
+                        let annotation_item: AnnotationItem =
+                            AnnotationItem::from_bytes(&mut class_data_cursor);
+                        let encoded_annotation: EncodedAnnotation = annotation_item.annotation;
+
+                        let mut annotation_elements_data: Vec<AnnotationElementsData> = vec![];
+                        for annotation in &encoded_annotation.elements {
+                            let name = annotation.name_idx;
+                            let encoded_item = &annotation.value;
+
+                            //TODO: check other values and subannotations
+                            let val = encoded_item.to_string_with_string_indexer(|idx| {
+                                get_string_from_idx(idx, &strings).unwrap_or_else(|| String::new())
+                            });
+
+                            let data = AnnotationElementsData {
+                                name: get_string_from_idx(name as u16, &strings).unwrap_or_else(
+                                    || {
+                                        log::error!("Could not resolve class name");
+                                        "-UNKONWN-".to_string()
+                                    },
+                                ),
+                                value: val,
+                            };
+                            annotation_elements_data.push(data);
+                        }
+
+                        let class_name = get_string_from_idx(
+                            types[encoded_annotation.type_idx as usize] as u16,
+                            &strings,
+                        )
+                        .unwrap_or_else(|| {
+                            log::error!("Could not resolve class name");
+                            "-UNKONWN- Class".to_string()
+                        });
+
+                        let f_annotation: AnnotationField = AnnotationField {
+                            field_idx: field_annotation.field_idx,
+                            visibility: annotation_item.visibility,
+                            type_idx: encoded_annotation.type_idx,
+                            class_name,
+                            elements: annotation_elements_data,
+                        };
+
+                        f_annotations.push(f_annotation);
+                    }
+                }
+
+                f_annotations
+            };
         }
 
         let mut the_class = Class {
@@ -350,6 +431,7 @@ pub fn parse_dex_buf(
             annotations_off: class.annotations_off,
             annotations,
             method_annotations,
+            field_annotations,
         };
 
         //todo we need the native functions (NO_INDEX since no instructions)
