@@ -205,7 +205,7 @@ class AnnotationMethod:
 
 class AnnotationField:
     def get_field_idx(self) -> int:
-        """Get method index"""
+        """Get field index"""
     def get_visibility(self) -> str:
         """Get the visibility of the annotation"""
     def get_classname(self) -> str:
