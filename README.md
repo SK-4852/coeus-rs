@@ -31,6 +31,7 @@ Coeus offers the following features:
 - Provide a Dex-Emulator for simple Code execution
 - Build a Graph of an Application and provide Callgraphs and such (thanks to [petgraph](https://docs.rs/petgraph/latest/petgraph/))
 - Provide Information-Flow-Analysis for static function evaluation
+- Minimal implementation of the JDWP protocol to allow "smali"-debugging
 
 ## Contributions
 
