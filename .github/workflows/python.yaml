@@ -10,11 +10,11 @@ concurrency:
 
 env:
   PACKAGE_NAME: coeus_python
-  PYTHON_VERSION: "3.6" # to build abi3 wheels
+  PYTHON_VERSION: "3.9" # to build abi3 wheels
 
 jobs:
   macos:
-    runs-on: [self-hosted, macos]
+    runs-on: [self-hosted, macOS]
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
