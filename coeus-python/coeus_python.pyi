@@ -18,10 +18,27 @@ class Debugger:
         """Resume a stopped debugger"""
     def wait_for_package(self) -> DebuggerStackFrame:
         """Performs a blocking wait for a debugger package and tries to get the stackframe from it"""
+    def new_string(self, string:str) -> StackValue:
+        """Create a new string on the VM"""
+    def get_code_indices(self, method: Method) -> list[int]:
+        """Get valid code indices from function"""
+    def get_breakpoints(self) -> list[VmBreakpoint]:
+        """Get all currently set breakpoints"""
+class VmBreakpoint:
+    def location(self) -> str:
+        """Get the location identifier for this breakpoint"""
 class DebuggerStackFrame:
     def get_values_for(self, debugger: Debugger, method: Method) -> list[StackValue]:
         """Get the values of the current stack frame"""
+    def set_value(self, debugger: Debugger,slot_idx: int, stackValue: StackValue):
+        """Set `stackValue` into `slot_idx` of the current frame"""
+    def get_code_index(self) -> int:
+        """Return the code index of the current stackframe"""
+    def step(self, debugger: Debugger):
+        """Step over"""
 class StackValue:
+    def __init__(self, debugger: Debugger, value: Any, oldValue:Optional[StackValue]):
+        """Initialize a new stack value, optional trying to fit the old value's type"""
     def get_value(self, debugger: Debugger) -> Any:
         """Get the value from the frame. If it is a primitive type or a string we get the actual value, else we just get the VM object reference id"""
 

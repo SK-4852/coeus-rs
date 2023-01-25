@@ -11,3 +11,4 @@ byteorder = "1.4.3"
 tokio = { version = "1.12.0", features = ["full"] }
 anyhow = "1.0.68"
 log = "0.4.17"
+rand = "0.8.5"

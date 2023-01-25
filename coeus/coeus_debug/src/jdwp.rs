@@ -7,13 +7,14 @@
 use std::{
     collections::HashMap,
     io::{Cursor, Read, Write},
+    time::Duration,
 };
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use tokio::{
     net::TcpStream,
-    runtime::{self, Builder, Runtime},
+    runtime::{Builder, Runtime},
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
     task::JoinHandle,
 };
@@ -21,7 +22,7 @@ use tokio::{
 use crate::{
     models::{
         Class, JdwpCommandPacket, JdwpEventType, JdwpPacket, JdwpReplyPacket, Location, Method,
-        Slot, VariableTable, VmType,
+        Slot, SlotValue, StackFrame, VariableTable, VmType,
     },
     FromBytes, ToBytes,
 };
@@ -85,7 +86,7 @@ impl JdwpClient {
         Ok(classes)
     }
     async fn get_methods(&mut self, reference_id: u64) -> anyhow::Result<Vec<Method>> {
-        let get_methods = JdwpCommandPacket::get_methods(3, reference_id);
+        let get_methods = JdwpCommandPacket::get_methods(rand::random(), reference_id);
         self.send_cmd(JdwpPacket::CommandPacket(get_methods))?;
         let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await  else {
             bail!("no reply");
@@ -131,7 +132,7 @@ impl JdwpClient {
         class_id: u64,
         method_id: u64,
     ) -> anyhow::Result<VariableTable> {
-        let cmd = JdwpCommandPacket::get_variable_table(10, class_id, method_id)?;
+        let cmd = JdwpCommandPacket::get_variable_table(rand::random(), class_id, method_id)?;
         self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
         let reply = self
             .wait_for_package()
@@ -147,7 +148,7 @@ impl JdwpClient {
     }
 
     async fn get_reference_type(&mut self, object_id: u64) -> anyhow::Result<u64> {
-        let cmd = JdwpCommandPacket::get_reference_type(10, object_id)?;
+        let cmd = JdwpCommandPacket::get_reference_type(rand::random(), object_id)?;
         self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
         let reply = self
             .wait_for_package()
@@ -181,7 +182,7 @@ impl JdwpClient {
         let mut tcp_handle =
             rt.block_on(async { TcpStream::connect(format!("{}:{}", addr, port)).await })?;
 
-        let mut tcp_handle = rt.block_on(async move {
+        let tcp_handle = rt.block_on(async move {
             tcp_handle.write_all(b"JDWP-Handshake").await?;
             let mut handshake_answer = vec![0u8; 14];
             tcp_handle.read_exact(&mut handshake_answer).await?;
@@ -257,7 +258,7 @@ impl JdwpClient {
     }
 
     pub async fn get_version_info(&mut self) -> anyhow::Result<String> {
-        let version_package = JdwpCommandPacket::version(1);
+        let version_package = JdwpCommandPacket::version(rand::random());
         self.send_cmd(JdwpPacket::CommandPacket(version_package))?;
         let Some(JdwpPacket::ReplyPacket(reply)) = self.wait_for_package().await else {
                 bail!("could not get version");
@@ -289,7 +290,7 @@ impl JdwpClient {
 
     pub fn get_class(&mut self, runtime: &Runtime, signature: &str) -> anyhow::Result<Vec<Class>> {
         runtime.block_on(async {
-            let class_package = JdwpCommandPacket::classes_by_signature(3, signature);
+            let class_package = JdwpCommandPacket::classes_by_signature(rand::random(), signature);
             self.send_cmd(JdwpPacket::CommandPacket(class_package))?;
             let pkg = self.wait_for_package().await;
             let Some(JdwpPacket::ReplyPacket(reply)) = pkg else {
@@ -301,7 +302,7 @@ impl JdwpClient {
 
     pub fn get_all_classes(&mut self, runtime: &Runtime) -> anyhow::Result<Vec<Class>> {
         runtime.block_on(async {
-            let id_package = JdwpCommandPacket::all_classes(3);
+            let id_package = JdwpCommandPacket::all_classes(rand::random());
             self.send_cmd(JdwpPacket::CommandPacket(id_package))?;
             let Some(JdwpPacket::ReplyPacket(reply)) = self.wait_for_package().await else {
             bail!("Wrong packet");
@@ -314,21 +315,29 @@ impl JdwpClient {
         &mut self,
         runtime: &Runtime,
         cmd: JdwpCommandPacket,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<u32> {
         runtime.block_on(async {
             self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
             let pkg = self.wait_for_package().await;
             let Some(JdwpPacket::ReplyPacket(reply)) = pkg else {
-            bail!("Wrong packet: {:?}", pkg);
-        };
+                bail!("Wrong packet: {:?}", pkg);
+            };
             if reply.is_error() {
                 bail!("SetBreakpoint failed: {}", reply.get_error());
             }
-            Ok(())
+            let mut reader = Cursor::new(reply.get_data());
+            reader
+                .read_u32::<BigEndian>()
+                .context("Could not read Request ID")
         })
     }
     pub async fn wait_for_package(&mut self) -> Option<JdwpPacket> {
-        self.rx.recv().await
+        tokio::select! {
+            a = self.rx.recv() => {
+                a
+            },
+            _ = tokio::time::sleep(Duration::from_secs(10)) => {None}
+        }
     }
     pub fn wait_for_package_blocking(&mut self, runtime: &Runtime) -> Option<JdwpPacket> {
         runtime.block_on(self.wait_for_package())
@@ -338,14 +347,36 @@ impl JdwpClient {
             let resume = JdwpCommandPacket::resume(id);
             self.send_cmd(JdwpPacket::CommandPacket(resume))?;
             let Some(JdwpPacket::ReplyPacket(_)) = self.wait_for_package().await else {
-            bail!("Wrong packet");
-        };
+                bail!("Wrong packet");
+            };
             Ok(())
+        })
+    }
+    pub fn clear_step(&mut self, runtime: &Runtime, event_id: u32) -> anyhow::Result<()> {
+        runtime.block_on(async {
+            let step = JdwpCommandPacket::clear_step(rand::random(), event_id)?;
+            self.send_cmd(JdwpPacket::CommandPacket(step))?;
+            let Some(JdwpPacket::ReplyPacket(_reply)) = self.wait_for_package().await else {
+                bail!("Wrong packet");
+            };
+            Ok(())
+        })
+    }
+    pub fn step(&mut self, runtime: &Runtime, thread_id: u64) -> anyhow::Result<u32> {
+        runtime.block_on(async {
+            let step = JdwpCommandPacket::step(rand::random(), thread_id)?;
+            self.send_cmd(JdwpPacket::CommandPacket(step))?;
+            let Some(JdwpPacket::ReplyPacket(reply)) = self.wait_for_package().await else {
+                bail!("Wrong packet");
+            };
+            let mut reader = Cursor::new(reply.get_data());
+            let request_id = reader.read_u32::<BigEndian>()?;
+            Ok(request_id)
         })
     }
     pub fn get_string(&mut self, runtime: &Runtime, string_ref: u64) -> anyhow::Result<String> {
         runtime.block_on(async {
-            let cmd = JdwpCommandPacket::get_string(10, string_ref)?;
+            let cmd = JdwpCommandPacket::get_string(rand::random(), string_ref)?;
             self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
             if let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await {
                 log::debug!("{:?}", reply);
@@ -355,6 +386,29 @@ impl JdwpClient {
             Ok(String::new())
         })
     }
+    pub fn create_string(&mut self, runtime: &Runtime, the_string: &str) -> anyhow::Result<u64> {
+        runtime.block_on(async {
+            let cmd = JdwpCommandPacket::create_string(rand::random(), the_string)?;
+            self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+            let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await else {
+               bail!("Wrong answer");
+            };
+            let mut reader = Cursor::new(reply.get_data());
+            reader
+                .read_u64::<BigEndian>()
+                .context("Could not read stringID")
+        })
+    }
+    pub fn set_value(
+        &mut self,
+        runtime: &Runtime,
+        stack_frame: &StackFrame,
+        slot_index: u32,
+        value: &SlotValue,
+    ) -> anyhow::Result<()> {
+        stack_frame.set_value(self, runtime, slot_index, value)?;
+        Ok(())
+    }
     pub fn get_object_signature(
         &mut self,
         runtime: &Runtime,
@@ -362,7 +416,7 @@ impl JdwpClient {
     ) -> anyhow::Result<String> {
         runtime.block_on(async {
             let ref_type = self.get_reference_type(object_ref).await?;
-            let cmd = JdwpCommandPacket::get_object_signature(10, ref_type)?;
+            let cmd = JdwpCommandPacket::get_object_signature(rand::random(), ref_type)?;
             self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
             if let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await {
                 log::debug!("{:?}", reply);
@@ -388,6 +442,37 @@ impl JdwpCommandPacket {
             command: 9,
             data: vec![],
         }
+    }
+    pub fn step(id: u32, thread_id: u64) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u8(JdwpEventType::SingleStep as u8)?;
+        data.write_u8(2u8)?;
+        data.write_u32::<BigEndian>(1)?;
+        data.write_u8(10)?;
+        data.write_u64::<BigEndian>(thread_id)?;
+        data.write_u32::<BigEndian>(0)?;
+        data.write_u32::<BigEndian>(1)?;
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 15,
+            command: 1,
+            data,
+        })
+    }
+    pub fn clear_step(id: u32, event_id: u32) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u8(JdwpEventType::SingleStep as u8)?;
+        data.write_u32::<BigEndian>(event_id)?;
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 15,
+            command: 2,
+            data,
+        })
     }
     pub fn version(id: u32) -> Self {
         let length = 11;
@@ -502,6 +587,42 @@ impl JdwpCommandPacket {
             flags: 0,
             command_set: 16,
             command: 1,
+            data,
+        })
+    }
+    pub fn set_values(
+        id: u32,
+        thread_id: u64,
+        frame_id: u64,
+        slot_idx: u32,
+        value: &SlotValue,
+    ) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u64::<BigEndian>(thread_id)?;
+        data.write_u64::<BigEndian>(frame_id)?;
+        data.write_u32::<BigEndian>(1)?;
+        data.write_u32::<BigEndian>(slot_idx)?;
+        data.write_all(&value.bytes()?)?;
+
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 16,
+            command: 2,
+            data,
+        })
+    }
+    pub fn create_string(id: u32, string: &str) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u32::<BigEndian>(string.len() as u32)?;
+        data.write_all(string.as_bytes())?;
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 1,
+            command: 11,
             data,
         })
     }

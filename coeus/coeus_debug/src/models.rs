@@ -11,7 +11,7 @@ use std::{
 
 use anyhow::bail;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use tokio::runtime::{self, Runtime};
+use tokio::runtime::Runtime;
 
 use crate::{jdwp::JdwpClient, FromBytes, ToBytes};
 
@@ -126,7 +126,7 @@ impl JdwpReplyPacket {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Method {
     pub method_id: u64,
     pub name: String,
@@ -143,7 +143,7 @@ impl Method {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Class {
     pub ty: ClassType,
     pub ref_type: u64,
@@ -304,12 +304,32 @@ impl ToBytes for JdwpPacket {
 
 #[derive(Debug)]
 pub struct StackFrame {
-    thread_id: u64,
-    frame_id: u64,
+    pub thread_id: u64,
+    pub frame_id: u64,
     location: Location,
 }
 
 impl StackFrame {
+    pub fn get_location(&self) -> Location {
+        self.location
+    }
+    pub fn set_value(
+        &self,
+        client: &mut JdwpClient,
+        runtime: &Runtime,
+        slot_idx: u32,
+        value: &SlotValue,
+    ) -> anyhow::Result<()> {
+        runtime.block_on(async {
+            let cmd =
+                JdwpCommandPacket::set_values(20, self.thread_id, self.frame_id, slot_idx, value)?;
+            client.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+            let Some(JdwpPacket::ReplyPacket(_)) = client.wait_for_package().await else {
+                bail!("Wrong answer");
+            };
+            Ok(())
+        })
+    }
     pub fn get_values(
         &self,
         m: &coeus_models::models::CodeItem,
@@ -369,15 +389,17 @@ pub struct Composite {
 }
 #[derive(Debug)]
 pub enum Event {
-    Breakpoint(Breakpoint),
+    SingleStep(SimpleEventData),
+    Breakpoint(SimpleEventData),
 }
+
 #[derive(Debug)]
-pub struct Breakpoint {
+pub struct SimpleEventData {
     request_id: u32,
     thread_id: u64,
     location: Location,
 }
-impl Breakpoint {
+impl SimpleEventData {
     pub fn get_thread(&self) -> Thread {
         Thread {
             thread_id: self.thread_id,
@@ -391,7 +413,7 @@ impl Breakpoint {
     }
 }
 
-impl FromBytes for Breakpoint {
+impl FromBytes for SimpleEventData {
     type ResultObject = Self;
     type ErrorObject = anyhow::Error;
 
@@ -420,8 +442,12 @@ impl TryFrom<JdwpCommandPacket> for Composite {
         for _ in 0..number_of_events {
             let event_kind = reader.read_u8()?;
             match event_kind {
+                1 => {
+                    let bp: SimpleEventData = SimpleEventData::from_bytes(&mut reader)?;
+                    events.push(Event::SingleStep(bp));
+                }
                 2 => {
-                    let bp: Breakpoint = Breakpoint::from_bytes(&mut reader)?;
+                    let bp: SimpleEventData = SimpleEventData::from_bytes(&mut reader)?;
                     events.push(Event::Breakpoint(bp));
                 }
                 _ => continue,
@@ -468,12 +494,12 @@ impl TryFrom<JdwpReplyPacket> for VariableTable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Location {
     ty: ClassType,
     class_id: u64,
     method_id: u64,
-    code_index: u64,
+    pub code_index: u64,
 }
 impl FromBytes for Location {
     type ResultObject = Self;
@@ -594,6 +620,63 @@ pub struct SlotValue {
     ty: u8,
     pub value: Value,
 }
+impl ToBytes for SlotValue {
+    type ErrorObject = anyhow::Error;
+
+    fn bytes(&self) -> Result<Vec<u8>, Self::ErrorObject> {
+        let mut data = vec![];
+        match self.value {
+            Value::Object(o) => {
+                data.write_u8(VmType::Object as u8)?;
+                data.write_u64::<BigEndian>(o)?;
+            }
+            Value::Byte(b) => {
+                data.write_u8(VmType::Byte as u8)?;
+                data.write_i8(b)?;
+            }
+            Value::Short(s) => {
+                data.write_u8(VmType::Short as u8)?;
+                data.write_i16::<BigEndian>(s)?;
+            }
+            Value::Int(i) => {
+                data.write_u8(VmType::Int as u8)?;
+                data.write_i32::<BigEndian>(i)?;
+            }
+            Value::Long(l) => {
+                data.write_u8(VmType::Object as u8)?;
+                data.write_i64::<BigEndian>(l)?;
+            }
+            Value::String(s) => {
+                data.write_u8(VmType::String as u8)?;
+                data.write_u64::<BigEndian>(s)?;
+            }
+            Value::Array(a) => {
+                data.write_u8(VmType::Array as u8)?;
+                data.write_u64::<BigEndian>(a)?;
+            }
+            Value::Float(f) => {
+                data.write_u8(VmType::Float as u8)?;
+                data.write_f32::<BigEndian>(f)?;
+            }
+            Value::Double(d) => {
+                data.write_u8(VmType::Double as u8)?;
+                data.write_f64::<BigEndian>(d)?;
+            }
+            Value::Boolean(b) => {
+                data.write_u8(VmType::Boolean as u8)?;
+                data.write_u8(b)?;
+            }
+            Value::Char(c) => {
+                data.write_u8(VmType::Object as u8)?;
+                data.write_i8(c as i8)?;
+            }
+            Value::Void => {
+                data.write_u8(VmType::Void as u8)?;
+            }
+        }
+        Ok(data)
+    }
+}
 impl FromBytes for SlotValue {
     type ResultObject = Self;
     type ErrorObject = anyhow::Error;
@@ -647,6 +730,60 @@ impl FromBytes for SlotValue {
                 value: Value::String(buf.read_u64::<BigEndian>()?),
             },
         })
+    }
+}
+impl From<Value> for SlotValue {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Object(_) => SlotValue {
+                ty: VmType::Object as u8,
+                value: value,
+            },
+            Value::Byte(_) => SlotValue {
+                ty: VmType::Byte as u8,
+                value: value,
+            },
+            Value::Short(_) => SlotValue {
+                ty: VmType::Short as u8,
+                value: value,
+            },
+            Value::Int(_) => SlotValue {
+                ty: VmType::Int as u8,
+                value: value,
+            },
+            Value::Long(_) => SlotValue {
+                ty: VmType::Long as u8,
+                value: value,
+            },
+            Value::String(_) => SlotValue {
+                ty: VmType::String as u8,
+                value: value,
+            },
+            Value::Array(_) => SlotValue {
+                ty: VmType::Array as u8,
+                value: value,
+            },
+            Value::Float(_) => SlotValue {
+                ty: VmType::Float as u8,
+                value: value,
+            },
+            Value::Double(_) => SlotValue {
+                ty: VmType::Double as u8,
+                value: value,
+            },
+            Value::Boolean(_) => SlotValue {
+                ty: VmType::Boolean as u8,
+                value: value,
+            },
+            Value::Char(_) => SlotValue {
+                ty: VmType::Char as u8,
+                value: value,
+            },
+            Value::Void => SlotValue {
+                ty: VmType::Void as u8,
+                value: value,
+            },
+        }
     }
 }
 

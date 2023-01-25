@@ -209,6 +209,7 @@ dependencies = [
  "byteorder",
  "coeus_models",
  "log",
+ "rand",
  "tokio",
 ]
 
