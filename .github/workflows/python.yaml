@@ -13,38 +13,38 @@ env:
   PYTHON_VERSION: "3.9" # to build abi3 wheels
 
 jobs:
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: aarch64
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          default: true
-      - name: Build wheels - aarch64
-        uses: messense/maturin-action@v1
-        with:
-          target: aarch64
-          args: --release --out dist --sdist
-          maturin-version: "v0.14.10"
-          working-directory: "coeus-python"
-      - name: Build wheels - universal2
-        uses: messense/maturin-action@v1
-        with:
-          args: --release --universal2 --out dist
-          maturin-version: "v0.14.10"
+  # macos:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-python@v4
+  #       with:
+  #         python-version: ${{ env.PYTHON_VERSION }}
+  #         architecture: aarch64
+  #     - name: Install Rust toolchain
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: stable
+  #         profile: minimal
+  #         default: true
+  #     - name: Build wheels - aarch64
+  #       uses: messense/maturin-action@v1
+  #       with:
+  #         target: aarch64
+  #         args: --release --out dist --sdist
+  #         maturin-version: "v0.14.10"
+  #         working-directory: "coeus-python"
+  #     - name: Build wheels - universal2
+  #       uses: messense/maturin-action@v1
+  #       with:
+  #         args: --release --universal2 --out dist
+  #         maturin-version: "v0.14.10"
 
-      - name: Upload wheels
-        uses: actions/upload-artifact@v3
-        with:
-          name: wheels
-          path: coeus-python/dist
+  #     - name: Upload wheels
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: wheels
+  #         path: coeus-python/dist
 
   # windows:
   #   runs-on: windows-latest
