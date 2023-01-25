@@ -8,4 +8,4 @@ maturin build --release --out dist --sdist
 maturin build --release --target x86_64-apple-darwin --out dist --sdist  
 maturin build --release --target x86_64-pc-windows-msvc --out dist --sdist
 maturin build --release --target x86_64-unknown-linux-gnu --out dist --sdist  
-maturin build --release --target x86_64-unknown-linux-musl --out dist --sdist
+maturin build --release --target aarch64-unknown-linux-gnu --out dist --sdist  
