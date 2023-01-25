@@ -533,6 +533,35 @@ impl AnnotationMethod {
 }
 
 #[pyclass]
+#[derive(Clone)]
+/// This represents an annotation.
+pub struct AnnotationField {
+    pub(crate) field_idx: u32,
+    pub(crate) visibility: String,
+    pub(crate) classname: String,
+    pub(crate) elements: Vec<AnnotationElement>,
+}
+
+#[pymethods]
+impl AnnotationField {
+    pub fn get_field_idx(&self) -> u32{
+        self.field_idx
+    }
+
+    pub fn get_visibility(&self) -> &str {
+        self.visibility.as_str()
+    }
+
+    pub fn get_classname(&self) -> &str {
+        self.classname.as_str()
+    }
+
+    pub fn get_elements(&self) -> Vec<AnnotationElement> {
+        self.elements.clone()
+    }
+}
+
+#[pyclass]
 /// This represents a string
 pub struct DexString {
     pub(crate) string: String,
@@ -1519,6 +1548,24 @@ impl Class {
                     .collect()
             }).collect()
     }
+
+    pub fn get_field_annotations(&self) -> Vec<AnnotationField> {
+        self.class
+            .field_annotations
+            .iter()
+            .map(|a| AnnotationField {
+                field_idx: a.field_idx,
+                visibility: a.visibility.to_string(),
+                classname: a.class_name.to_string(),
+                elements: a.elements
+                    .iter()
+                    .map(|elem| AnnotationElement {
+                        name: elem.name.clone(),
+                        value: elem.value.clone(),
+                    })
+                    .collect()
+            }).collect()
+    }
 }
 
 pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -1535,5 +1582,6 @@ pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Annotation>()?;
     m.add_class::<AnnotationElement>()?;
     m.add_class::<AnnotationMethod>()?;
+    m.add_class::<AnnotationField>()?;
     Ok(())
 }
