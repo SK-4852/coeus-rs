@@ -202,6 +202,8 @@ class Class:
         """Get a method of this class by name"""
     def friendly_name(self) -> str:
         """Get a `friendly` name for this class."""
+    def find_subclasses(self, ao: AnalyzeObject) -> list[Class]:
+        """Find all subclasses of this super class."""
     def find_implementations(self, ao: AnalyzeObject) -> list[Class]:
         """Find all implementations of this interface (if it is an interface)."""
     def get_annotations_off(self) -> int:

@@ -1355,6 +1355,24 @@ impl Class {
     pub fn __richcmp__(&self, other: &Class, _op: pyo3::basic::CompareOp) -> bool {
         self.name() == other.name()
     }
+
+    pub fn find_subclasses(&self, ao: &AnalyzeObject) -> Vec<Class> {
+        let Some((md, _)) = ao
+            .files
+            .get_multi_dex_from_dex_identifier(&self.file.identifier) else 
+        {
+           return vec![];
+        };
+        let subclasses = md.get_subclasses_for(&self.class);
+        return subclasses
+            .iter()
+            .map(|(f, c)| Class {
+                class: c.clone(),
+                file: f.clone(),
+            })
+            .collect();
+    }
+
     pub fn find_implementations(&self, ao: &AnalyzeObject) -> Vec<Class> {
         if let Some((md, _)) = ao
             .files

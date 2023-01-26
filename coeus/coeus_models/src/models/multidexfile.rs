@@ -57,6 +57,13 @@ impl<'a> MultiDexFile {
         }
         impls
     }
+     pub fn get_subclasses_for(&self, class: &Class) -> Vec<(Arc<DexFile>,Arc<Class>)> {
+        let mut impls = self.primary.get_subclasses_for(class);
+        for s in &self.secondary {
+            impls.extend(s.get_subclasses_for(class));
+        }
+        impls
+    }
 
     pub fn dex_file_from_identifier(&self, identifier: &str) -> Option<Arc<DexFile>> {
         if self.primary.identifier == identifier {

@@ -21,6 +21,8 @@ use self::graph::build_graph;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::iter::ParallelIterator;
 
+const NO_INDEX: u32 = 0xffffffff;
+
 pub trait ReadSeek: Read + Seek {}
 
 impl<T> ReadSeek for T where T: Read + Seek {}
@@ -105,9 +107,10 @@ pub fn parse_dex_buf(
     let mut ret_classes = Vec::with_capacity(classes.len());
     let vec_lock = Arc::new(Mutex::new(&mut ret_classes));
     let v_table = Mutex::new(HashMap::new());
+    let s_table = Mutex::new(HashMap::new());
+
     iterator!(classes).for_each(|class| {
         //class is not here, but still link it (e.g. sdk stuff)
-
         if class.class_data_off < config.data_off {
             let the_class = Arc::new(Class {
                 dex_identifier: format!("{:02x?}", config.signature),
@@ -184,7 +187,6 @@ pub fn parse_dex_buf(
             annotations = vec![];
             method_annotations = vec![];
             field_annotations = vec![];
-
         } else {
             class_data_cursor
                 .seek(SeekFrom::Start(class.annotations_off as u64))
@@ -412,18 +414,18 @@ pub fn parse_dex_buf(
                 f_annotations
             };
         }
-
+        let class_name = get_string_from_idx(types[class.class_idx as usize] as u16, &strings)
+            .unwrap_or_else(|| {
+                log::error!("Could not resolve class name");
+                "-UNKONWN-".to_string()
+            });
         let mut the_class = Class {
             dex_identifier: format!("{:02x?}", config.signature),
             class_idx: class.class_idx,
             access_flags: AccessFlags::from_bits(class.access_flags as u64)
                 .expect("accessflags wrong"),
             super_class: class.superclass_idx,
-            class_name: get_string_from_idx(types[class.class_idx as usize] as u16, &strings)
-                .unwrap_or_else(|| {
-                    log::error!("Could not resolve class name");
-                    "-UNKONWN-".to_string()
-                }),
+            class_name: class_name.clone(),
             class_data,
             codes: vec![],
             static_fields,
@@ -502,6 +504,23 @@ pub fn parse_dex_buf(
             });
         }
         let the_class = Arc::new(the_class);
+
+        if let Ok(mut lock) = s_table.lock() {
+            if !lock.contains_key(&class_name) {
+                lock.insert(class_name, vec![]);
+            }
+            if class.superclass_idx < NO_INDEX {
+                let super_class =
+                    get_string_from_idx(types[class.superclass_idx as usize] as u16, &strings)
+                        .unwrap_or_else(|| {
+                            log::error!("Could not resolve class name");
+                            "-UNKONWN-".to_string()
+                        });
+                let entry = lock.entry(super_class).or_default();
+                entry.push(the_class.clone());
+            }
+        }
+
         if let Ok(mut v_table) = v_table.lock() {
             for &type_idx in &the_class.interfaces {
                 if let Some(iface_name) =
@@ -518,6 +537,7 @@ pub fn parse_dex_buf(
         };
     });
     let v_table = v_table.into_inner().unwrap();
+    let s_table = s_table.into_inner().unwrap();
     Some(DexFile {
         identifier: format!("{:02x?}", config.signature),
         file_name: file_name.to_string(),
@@ -528,7 +548,8 @@ pub fn parse_dex_buf(
         methods,
         fields,
         classes: ret_classes,
-        virtual_table: v_table,
+        interface_table: v_table,
+        superclass_table: s_table,
     })
 }
 

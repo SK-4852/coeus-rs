@@ -5,8 +5,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use coeus_macros::iterator;
-use std::{collections::HashMap, sync::Arc};
 use std::path::Path;
+use std::{collections::HashMap, sync::Arc};
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
@@ -31,7 +31,8 @@ pub struct DexFile {
     pub fields: Vec<Arc<Field>>,
     #[serde(skip_serializing)]
     pub classes: Vec<Arc<Class>>,
-    pub virtual_table: HashMap<String, Vec<Arc<Class>>>,
+    pub interface_table: HashMap<String, Vec<Arc<Class>>>,
+    pub superclass_table: HashMap<String, Vec<Arc<Class>>>,
 }
 
 impl PartialEq for DexFile {
@@ -47,8 +48,18 @@ impl DexFile {
 
     pub fn get_implementations_for(&self, class: &Class) -> Vec<(Arc<DexFile>, Arc<Class>)> {
         let self_clone = Arc::new(self.clone());
-        if let Some(impls) = self.virtual_table.get(&class.class_name) {
+        if let Some(impls) = self.interface_table.get(&class.class_name) {
             return impls
+                .iter()
+                .map(|c| (self_clone.clone(), c.clone()))
+                .collect();
+        }
+        vec![]
+    }
+    pub fn get_subclasses_for(&self, class: &Class) -> Vec<(Arc<DexFile>, Arc<Class>)> {
+        let self_clone = Arc::new(self.clone());
+        if let Some(subclasses) = self.superclass_table.get(&class.class_name) {
+            return subclasses
                 .iter()
                 .map(|c| (self_clone.clone(), c.clone()))
                 .collect();
@@ -66,12 +77,12 @@ impl DexFile {
     }
 
     pub fn get_dex_name(&self) -> &str {
-		Path::new(&self.file_name)
-		.file_name()
-		.unwrap()
-		.to_str()
-		.unwrap()
-	}
+        Path::new(&self.file_name)
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+    }
 
     pub fn get_type_name<T>(&self, type_idx: T) -> Option<&str>
     where
