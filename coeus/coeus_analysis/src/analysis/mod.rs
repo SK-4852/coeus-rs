@@ -28,8 +28,6 @@ pub mod dex;
 pub mod instruction_flow;
 pub mod native;
 
-pub mod relations;
-
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ClassEvidences {
     pub class: Class,
