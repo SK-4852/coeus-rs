@@ -21,8 +21,8 @@ use tokio::{
 
 use crate::{
     models::{
-        Class, JdwpCommandPacket, JdwpEventType, JdwpPacket, JdwpReplyPacket, Location, Method,
-        Slot, SlotValue, StackFrame, VariableTable, VmType,
+        Class, ClassInstance, Field, JdwpCommandPacket, JdwpEventType, JdwpPacket, JdwpReplyPacket,
+        Location, Method, Slot, SlotValue, StackFrame, VariableTable, VmType,
     },
     FromBytes, ToBytes,
 };
@@ -161,6 +161,71 @@ impl JdwpClient {
         let _ = reader.read_u8()?;
         let reference_id = reader.read_u64::<BigEndian>()?;
         Ok(reference_id)
+    }
+    async fn get_field_ids_for_reference_type(
+        &mut self,
+        reference_id: u64,
+    ) -> anyhow::Result<Vec<Field>> {
+        let cmd = JdwpCommandPacket::get_fields_for_reference_type(rand::random(), reference_id)?;
+        self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+        let reply = self
+            .wait_for_package()
+            .await
+            .ok_or_else(|| anyhow::Error::msg("No answer"))?;
+        let JdwpPacket::ReplyPacket(reply) = reply else {
+            panic!("Wrong packet");
+        };
+        let mut reader = Cursor::new(reply.get_data());
+        let num_of_fields = reader.read_u32::<BigEndian>()?;
+        let mut fields = vec![];
+        for _ in 0..num_of_fields {
+            fields.push(Field::from_bytes(&mut reader).context("Get field id failed")?);
+        }
+        Ok(fields)
+    }
+    async fn get_fields(
+        &mut self,
+        object_id: u64,
+        fields: Vec<Field>,
+    ) -> anyhow::Result<Vec<Field>> {
+        let fields = fields
+            .into_iter()
+            .filter(|f| f.flags & 0x8 != 0x8)
+            .collect::<Vec<_>>();
+        if fields.is_empty() {
+            return Ok(vec![]);
+        }
+        let cmd = JdwpCommandPacket::get_fields(rand::random(), object_id, &fields)?;
+        self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+        let reply = self
+            .wait_for_package()
+            .await
+            .ok_or_else(|| anyhow::Error::msg("No answer"))?;
+        let JdwpPacket::ReplyPacket(reply) = reply else {
+            bail!("Wrong packet");
+        };
+        let mut reader = Cursor::new(reply.get_data());
+        let num_of_fields = reader.read_u32::<BigEndian>()?;
+        if reply.is_error() {
+            bail!("We got error code: {}", reply.get_error());
+        }
+        let mut fields = fields;
+        for i in 0..num_of_fields {
+            let slot_value = SlotValue::from_bytes(&mut reader).context("SlotValue failed")?;
+            fields[i as usize].value = Some(slot_value);
+        }
+        Ok(fields)
+    }
+
+    async fn get_object_signature(&mut self, reference_type: u64) -> anyhow::Result<String> {
+        let cmd = JdwpCommandPacket::get_object_signature(rand::random(), reference_type)?;
+        self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+        if let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await {
+            log::debug!("{:?}", reply);
+            let mut data_cursor = Cursor::new(reply.get_data());
+            return String::from_bytes(&mut data_cursor);
+        }
+        bail!("Something went wrong");
     }
 }
 
@@ -409,21 +474,23 @@ impl JdwpClient {
         stack_frame.set_value(self, runtime, slot_index, value)?;
         Ok(())
     }
-    pub fn get_object_signature(
+
+    pub fn get_object(
         &mut self,
         runtime: &Runtime,
         object_ref: u64,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<ClassInstance> {
         runtime.block_on(async {
             let ref_type = self.get_reference_type(object_ref).await?;
-            let cmd = JdwpCommandPacket::get_object_signature(rand::random(), ref_type)?;
-            self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
-            if let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await {
-                log::debug!("{:?}", reply);
-                let mut data_cursor = Cursor::new(reply.get_data());
-                return String::from_bytes(&mut data_cursor);
-            }
-            Ok(String::new())
+            let signature = self.get_object_signature(ref_type).await?;
+            let fields = self.get_field_ids_for_reference_type(ref_type).await?;
+            let fields = self.get_fields(object_ref, fields).await?;
+            Ok(ClassInstance {
+                object_id: object_ref,
+                reference_type: ref_type,
+                signature,
+                fields,
+            })
         })
     }
     pub fn send_cmd(&mut self, cmd: JdwpPacket) -> anyhow::Result<()> {
@@ -662,6 +729,35 @@ impl JdwpCommandPacket {
             flags: 0,
             command_set: 2,
             command: 1,
+            data,
+        })
+    }
+    pub fn get_fields_for_reference_type(id: u32, reference_id: u64) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u64::<BigEndian>(reference_id)?;
+
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 2,
+            command: 4,
+            data,
+        })
+    }
+    pub fn get_fields(id: u32, object_id: u64, fields: &[Field]) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u64::<BigEndian>(object_id)?;
+        data.write_u32::<BigEndian>(fields.len() as u32)?;
+        for f in fields {
+            data.write_u64::<BigEndian>(f.field_id)?;
+        }
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 9,
+            command: 2,
             data,
         })
     }

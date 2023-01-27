@@ -24,6 +24,9 @@ class Debugger:
         """Get valid code indices from function"""
     def get_breakpoints(self) -> list[VmBreakpoint]:
         """Get all currently set breakpoints"""
+class VmInstance:
+    def to_string(self, debugger: Debugger) -> str:
+        """Get a string representation of the object"""
 class VmBreakpoint:
     def location(self) -> str:
         """Get the location identifier for this breakpoint"""

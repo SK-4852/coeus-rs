@@ -180,6 +180,38 @@ impl Class {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub field_id: u64,
+    pub name: String,
+    pub signature: String,
+    pub flags: u32,
+    pub value: Option<SlotValue>,
+}
+
+impl FromBytes for Field {
+    type ResultObject = Field;
+
+    type ErrorObject = anyhow::Error;
+
+    fn from_bytes<R>(buf: &mut R) -> Result<Self::ResultObject, Self::ErrorObject>
+    where
+        R: Read,
+    {
+        let field_id = buf.read_u64::<BigEndian>()?;
+        let name = String::from_bytes(buf)?;
+        let signature = String::from_bytes(buf)?;
+        let flags = buf.read_u32::<BigEndian>()?;
+        Ok(Field {
+            field_id,
+            name,
+            signature,
+            flags,
+            value: None,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub enum ClassType {
@@ -214,6 +246,10 @@ pub enum VmType {
     Void = 86,
     Boolean = 90,
     String = 115,
+    Thread = 116,
+    ThreadGroup = 103,
+    ClassLoader = 108,
+    ClassObject = 99,
 }
 impl TryFrom<u8> for VmType {
     type Error = anyhow::Error;
@@ -231,6 +267,10 @@ impl TryFrom<u8> for VmType {
             86 => Ok(Self::Void),
             90 => Ok(Self::Boolean),
             115 => Ok(Self::String),
+            116 => Ok(Self::Thread),
+            103 => Ok(Self::ThreadGroup),
+            108 => Ok(Self::ClassLoader),
+            99 => Ok(Self::ClassObject),
             _ => bail!("Unknown type"),
         }
     }
@@ -673,6 +713,7 @@ impl ToBytes for SlotValue {
             Value::Void => {
                 data.write_u8(VmType::Void as u8)?;
             }
+            Value::Reference(_) => bail!("Cannot write reference"),
         }
         Ok(data)
     }
@@ -703,8 +744,14 @@ impl FromBytes for SlotValue {
                 ty,
                 value: Value::Object(buf.read_u64::<BigEndian>()?),
             },
-            VmType::Float => todo!(),
-            VmType::Double => todo!(),
+            VmType::Float => SlotValue {
+                ty,
+                value: Value::Float(buf.read_f32::<BigEndian>()?),
+            },
+            VmType::Double => SlotValue {
+                ty,
+                value: Value::Double(buf.read_f64::<BigEndian>()?),
+            },
             VmType::Int => SlotValue {
                 ty,
                 value: Value::Int(buf.read_i32::<BigEndian>()?),
@@ -728,6 +775,22 @@ impl FromBytes for SlotValue {
             VmType::String => SlotValue {
                 ty,
                 value: Value::String(buf.read_u64::<BigEndian>()?),
+            },
+            VmType::Thread => SlotValue {
+                ty,
+                value: Value::Reference(buf.read_u64::<BigEndian>()?),
+            },
+            VmType::ThreadGroup => SlotValue {
+                ty,
+                value: Value::Reference(buf.read_u64::<BigEndian>()?),
+            },
+            VmType::ClassLoader => SlotValue {
+                ty,
+                value: Value::Reference(buf.read_u64::<BigEndian>()?),
+            },
+            VmType::ClassObject => SlotValue {
+                ty,
+                value: Value::Reference(buf.read_u64::<BigEndian>()?),
             },
         })
     }
@@ -783,6 +846,10 @@ impl From<Value> for SlotValue {
                 ty: VmType::Void as u8,
                 value: value,
             },
+            Value::Reference(_) => SlotValue {
+                ty: VmType::ClassObject as u8,
+                value: value
+            }
         }
     }
 }
@@ -801,5 +868,12 @@ pub enum Value {
     Boolean(u8),
     Char(char),
     Void,
+    Reference(u64),
 }
-pub struct ClassInstance {}
+#[derive(Debug, Clone)]
+pub struct ClassInstance {
+    pub object_id: u64,
+    pub reference_type: u64,
+    pub signature: String,
+    pub fields: Vec<Field>,
+}

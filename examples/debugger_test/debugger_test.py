@@ -4,7 +4,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from coeus_python import AnalyzeObject, Debugger, StackValue
+from coeus_python import AnalyzeObject, Debugger, StackValue, VmInstance
 
 # Open the apk and parse it
 ao = AnalyzeObject("./app-debug.apk", True, -1)
@@ -47,7 +47,11 @@ while True:
                 # For object references it will lookup the class name
                 # this class name should be in the correct format to be used for
                 # furhter analysis with coeus (keep in mind the regex escaping)
-                print(f"v{i}: {val.get_value(debugger)}")
+                v = val.get_value(debugger)
+                if isinstance(v, VmInstance):
+                    print(f"v{i}: {v.to_string(debugger)}")
+                else:
+                    print(f"v{i}: {v}")
                 i += 1
             print()
             cmd = input("Command? ")
