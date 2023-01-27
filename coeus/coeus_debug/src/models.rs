@@ -848,8 +848,8 @@ impl From<Value> for SlotValue {
             },
             Value::Reference(_) => SlotValue {
                 ty: VmType::ClassObject as u8,
-                value: value
-            }
+                value: value,
+            },
         }
     }
 }
@@ -869,6 +869,16 @@ pub enum Value {
     Char(char),
     Void,
     Reference(u64),
+}
+#[derive(Debug, Clone)]
+pub enum ArrayValues {
+    ByteArray(Vec<u8>),
+    ShortArray(Vec<u16>),
+    IntArray(Vec<i32>),
+    LongArray(Vec<i64>),
+    FloatArray(Vec<f32>),
+    DoubleArray(Vec<f64>),
+    BooleanArray(Vec<bool>),
 }
 #[derive(Debug, Clone)]
 pub struct ClassInstance {

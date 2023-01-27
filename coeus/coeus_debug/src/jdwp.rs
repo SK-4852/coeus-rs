@@ -21,8 +21,8 @@ use tokio::{
 
 use crate::{
     models::{
-        Class, ClassInstance, Field, JdwpCommandPacket, JdwpEventType, JdwpPacket, JdwpReplyPacket,
-        Location, Method, Slot, SlotValue, StackFrame, VariableTable, VmType,
+        ArrayValues, Class, ClassInstance, Field, JdwpCommandPacket, JdwpEventType, JdwpPacket,
+        JdwpReplyPacket, Location, Method, Slot, SlotValue, StackFrame, VariableTable, VmType,
     },
     FromBytes, ToBytes,
 };
@@ -226,6 +226,94 @@ impl JdwpClient {
             return String::from_bytes(&mut data_cursor);
         }
         bail!("Something went wrong");
+    }
+    async fn get_array_length(&mut self, array_reference: u64) -> anyhow::Result<u32> {
+        let cmd = JdwpCommandPacket::get_array_length(rand::random(), array_reference)?;
+        self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+        let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await else {
+           bail!("Wrong packet"); 
+        };
+        let mut reader = Cursor::new(reply.get_data());
+        reader
+            .read_u32::<BigEndian>()
+            .context("Failed to read array length")
+    }
+    /// For now we only support primitive typed arrays
+    async fn get_array_values(
+        &mut self,
+        array_reference: u64,
+        start_index: u32,
+        length: u32,
+    ) -> anyhow::Result<ArrayValues> {
+        let cmd = JdwpCommandPacket::get_array_values(
+            rand::random(),
+            array_reference,
+            start_index,
+            length,
+        )?;
+        self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+        let Some(JdwpPacket::ReplyPacket(reply)) = self.rx.recv().await else {
+           bail!("Wrong packet"); 
+        };
+        let mut reader = Cursor::new(reply.get_data());
+        let type_tag = reader.read_u8()?;
+        let vm_type = VmType::try_from(type_tag)?;
+        let length = reader.read_u32::<BigEndian>()?;
+        match vm_type {
+            VmType::Byte => {
+                let mut buffer = vec![0u8; length as usize];
+                reader.read_exact(&mut buffer)?;
+                Ok(ArrayValues::ByteArray(buffer))
+            }
+            VmType::Char => {
+                let mut buffer = vec![0u8; length as usize];
+                reader.read_exact(&mut buffer)?;
+                Ok(ArrayValues::ByteArray(buffer))
+            }
+            VmType::Float => {
+                let mut buffer = vec![0f32; length as usize];
+                for i in 0..length {
+                    buffer[i as usize] = reader.read_f32::<BigEndian>()?;
+                }
+                Ok(ArrayValues::FloatArray(buffer))
+            }
+            VmType::Double => {
+                let mut buffer = vec![0f64; length as usize];
+                for i in 0..length {
+                    buffer[i as usize] = reader.read_f64::<BigEndian>()?;
+                }
+                Ok(ArrayValues::DoubleArray(buffer))
+            }
+            VmType::Int => {
+                let mut buffer = vec![0i32; length as usize];
+                for i in 0..length {
+                    buffer[i as usize] = reader.read_i32::<BigEndian>()?;
+                }
+                Ok(ArrayValues::IntArray(buffer))
+            }
+            VmType::Long => {
+                let mut buffer = vec![0i64; length as usize];
+                for i in 0..length {
+                    buffer[i as usize] = reader.read_i64::<BigEndian>()?;
+                }
+                Ok(ArrayValues::LongArray(buffer))
+            }
+            VmType::Short => {
+                let mut buffer = vec![0u16; length as usize];
+                for i in 0..length {
+                    buffer[i as usize] = reader.read_u16::<BigEndian>()?;
+                }
+                Ok(ArrayValues::ShortArray(buffer))
+            }
+            VmType::Boolean => {
+                let mut buffer = vec![false; length as usize];
+                for i in 0..length {
+                    buffer[i as usize] = reader.read_u8()? != 0;
+                }
+                Ok(ArrayValues::BooleanArray(buffer))
+            }
+            _ => Ok(ArrayValues::ByteArray(vec![])),
+        }
     }
 }
 
@@ -493,6 +581,16 @@ impl JdwpClient {
             })
         })
     }
+    pub fn get_array(
+        &mut self,
+        runtime: &Runtime,
+        array_reference: u64,
+    ) -> anyhow::Result<ArrayValues> {
+        runtime.block_on(async {
+            let length = self.get_array_length(array_reference).await?;
+            self.get_array_values(array_reference, 0, length).await
+        })
+    }
     pub fn send_cmd(&mut self, cmd: JdwpPacket) -> anyhow::Result<()> {
         self.tx.send(cmd)?;
         Ok(())
@@ -757,6 +855,39 @@ impl JdwpCommandPacket {
             id,
             flags: 0,
             command_set: 9,
+            command: 2,
+            data,
+        })
+    }
+    pub fn get_array_length(id: u32, array_reference: u64) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u64::<BigEndian>(array_reference)?;
+
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 13,
+            command: 1,
+            data,
+        })
+    }
+    pub fn get_array_values(
+        id: u32,
+        array_reference: u64,
+        start_index: u32,
+        length: u32,
+    ) -> anyhow::Result<Self> {
+        let mut data = vec![];
+        data.write_u64::<BigEndian>(array_reference)?;
+        data.write_u32::<BigEndian>(start_index)?;
+        data.write_u32::<BigEndian>(length)?;
+
+        Ok(Self {
+            length: 11 + data.len() as u32,
+            id,
+            flags: 0,
+            command_set: 13,
             command: 2,
             data,
         })

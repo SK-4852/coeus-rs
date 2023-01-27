@@ -197,7 +197,12 @@ impl StackValue {
                 };
                 Ok(s.to_object(py))
             }
-            coeus::coeus_debug::models::Value::Array(a) => Ok(a.to_object(py)),
+            coeus::coeus_debug::models::Value::Array(a) => {
+                let Ok(values) = debugger.jdwp_client.get_array(&debugger.rt, a) else {
+                     return Err(PyRuntimeError::new_err("Could not get array"));
+                };
+                Ok(format!("{:?}", values).to_object(py))
+            }
             coeus::coeus_debug::models::Value::Float(f) => Ok(f.to_object(py)),
             coeus::coeus_debug::models::Value::Double(d) => Ok(d.to_object(py)),
             coeus::coeus_debug::models::Value::Boolean(b) => Ok((b == 1).to_object(py)),
