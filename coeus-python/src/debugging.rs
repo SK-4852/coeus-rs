@@ -57,7 +57,7 @@ impl VmInstance {
                 if let Ok(val) = s.extract::<VmInstance>(py) {
                     format!("[{}@{}]", val.inner.signature, val.inner.object_id)
                 } else {
-                    format!("{s} [{v:?}]" )
+                    format!("{s} [{v:?}]")
                 }
             } else {
                 "null".to_string()
@@ -178,12 +178,14 @@ impl StackValue {
     pub fn get_value(&self, debugger: &mut Debugger, py: Python) -> PyResult<Py<PyAny>> {
         match self.slot.value {
             coeus::coeus_debug::models::Value::Object(o) => {
+                if o == 0 {
+                    return Ok(None::<String>.to_object(py));
+                }
                 let s = match debugger.jdwp_client.get_object(&debugger.rt, o) {
                     Ok(s) => s,
                     Err(e) => {
                         return Err(PyRuntimeError::new_err(format!(
-                            "Could not get object_reference: {}",
-                            e
+                            "Could not get object_reference: {e}",
                         )))
                     }
                 };
