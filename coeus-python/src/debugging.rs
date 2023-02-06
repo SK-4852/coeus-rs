@@ -12,7 +12,6 @@ use coeus::coeus_debug::{
 };
 use pyo3::{
     exceptions::PyRuntimeError,
-    ffi::Py_None,
     pyclass, pymethods,
     types::{PyBool, PyFloat, PyLong, PyModule, PyString},
     IntoPy, Py, PyAny, PyResult, Python, ToPyObject,
@@ -58,12 +57,12 @@ impl VmInstance {
                 if let Ok(val) = s.extract::<VmInstance>(py) {
                     format!("[{}@{}]", val.inner.signature, val.inner.object_id)
                 } else {
-                    format!("{}", s)
+                    format!("{s} [{v:?}]" )
                 }
             } else {
                 "null".to_string()
             };
-            output.push_str(&format!("\t{} : {} = {:?} \n", f.name, f.signature, value));
+            output.push_str(&format!("\t{} : {} = {:?}\n", f.name, f.signature, value));
         }
         Ok(output)
     }
@@ -89,6 +88,9 @@ pub struct StackValue {
 }
 #[pymethods]
 impl StackValue {
+    pub fn __str__(&self) -> String {
+        format!("{:?}", self.slot)
+    }
     #[new]
     pub fn new(
         py: Python,
@@ -289,6 +291,7 @@ impl Debugger {
             }
         };
         let first = &class[0];
+        println!("{first:?}");
         let name_and_sig = method.signature().replace(&format!("{}->", class_name), "");
         let cmd = match first.set_breakpoint(&name_and_sig, code_index) {
             Ok(cmd) => cmd,

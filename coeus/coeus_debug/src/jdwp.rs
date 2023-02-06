@@ -148,18 +148,25 @@ impl JdwpClient {
     }
 
     async fn get_reference_type(&mut self, object_id: u64) -> anyhow::Result<u64> {
-        let cmd = JdwpCommandPacket::get_reference_type(rand::random(), object_id)?;
+        let cmd = JdwpCommandPacket::get_reference_type(rand::random(), object_id)
+            .context("Could not write to buffer")?;
         self.send_cmd(JdwpPacket::CommandPacket(cmd))?;
         let reply = self
             .wait_for_package()
             .await
             .ok_or_else(|| anyhow::Error::msg("No answer"))?;
         let JdwpPacket::ReplyPacket(reply) = reply else {
-            panic!("Wrong packet");
+            bail!("Wrong packet");
         };
+        if reply.is_error() {
+            bail!("CMD was error: {}", reply.get_error());
+        }
+
         let mut reader = Cursor::new(reply.get_data());
-        let _ = reader.read_u8()?;
-        let reference_id = reader.read_u64::<BigEndian>()?;
+        let _ = reader.read_u8().context("could not read type tag")?;
+        let reference_id = reader
+            .read_u64::<BigEndian>()
+            .context("Could not read reference type id")?;
         Ok(reference_id)
     }
     async fn get_field_ids_for_reference_type(
@@ -569,10 +576,22 @@ impl JdwpClient {
         object_ref: u64,
     ) -> anyhow::Result<ClassInstance> {
         runtime.block_on(async {
-            let ref_type = self.get_reference_type(object_ref).await?;
-            let signature = self.get_object_signature(ref_type).await?;
-            let fields = self.get_field_ids_for_reference_type(ref_type).await?;
-            let fields = self.get_fields(object_ref, fields).await?;
+            let ref_type = self
+                .get_reference_type(object_ref)
+                .await
+                .context("failed getting ref_type")?;
+            let signature = self
+                .get_object_signature(ref_type)
+                .await
+                .context("failed getting the signature")?;
+            let fields = self
+                .get_field_ids_for_reference_type(ref_type)
+                .await
+                .context("failed getting field ids")?;
+            let fields = self
+                .get_fields(object_ref, fields)
+                .await
+                .context("failed getting field references")?;
             Ok(ClassInstance {
                 object_id: object_ref,
                 reference_type: ref_type,

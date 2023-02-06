@@ -166,7 +166,7 @@ impl Class {
             method_id: m.method_id,
             code_index,
         };
-        JdwpCommandPacket::set_breakpoint(4, &location)
+        JdwpCommandPacket::set_breakpoint(rand::random(), &location)
     }
     pub fn get_method(&self, method_id: u64) -> anyhow::Result<&Method> {
         let Some(m) = self.methods
@@ -300,6 +300,8 @@ impl TryFrom<&str> for VmType {
     }
 }
 
+const TYPES: [char; 11] = ['[', 'Z', 'B', 'F', 'D', 'I', 'J', 'S', 'V', 'C', 'L'];
+
 #[repr(C)]
 pub enum JdwpEventType {
     SingleStep = 1,
@@ -377,30 +379,56 @@ impl StackFrame {
         runtime: &Runtime,
     ) -> anyhow::Result<Vec<SlotValue>> {
         runtime.block_on(async {
-            let mut slots_in_scope = vec![];
-            for i in 0..m.register_size {
-                slots_in_scope.push(Slot {
-                    code_index: 0,
-                    name: String::new(),
-                    signature: String::from("L"),
-                    length: 0,
-                    slot_idx: i as u32,
-                })
-            }
-            let cmd =
-                JdwpCommandPacket::get_values(20, self.thread_id, self.frame_id, &slots_in_scope)?;
-            client.send_cmd(JdwpPacket::CommandPacket(cmd))?;
-            let Some(JdwpPacket::ReplyPacket(reply)) = client.wait_for_package().await else {
-                bail!("Wrong answer");
-            };
-            log::debug!("Values: {:?}", reply);
-            let mut reader = Cursor::new(reply.data);
-            let number_of_values = reader.read_u32::<BigEndian>()?;
+            let mut slots_in_scope = vec![Slot {
+                code_index: 0,
+                name: String::new(),
+                signature: String::from("L"),
+                length: 0,
+                slot_idx: 0,
+            }];
             let mut slot_values = vec![];
-            for _ in 0..number_of_values {
-                let Ok(val) = SlotValue::from_bytes(&mut reader) else {break};
-                slot_values.push(val);
+            for i in (0..m.register_size).rev() {
+                let mut error_code = 1;
+                let mut types_iterator = TYPES.iter();
+                while error_code != 0 && error_code != 35 {
+                    let Some(ty) = types_iterator.next() else {
+                        break;
+                    };
+
+                    slots_in_scope[0] = Slot {
+                        code_index: 0,
+                        name: String::new(),
+                        signature: ty.to_string(),
+                        length: 0,
+                        slot_idx: i as u32,
+                    };
+                    let cmd = JdwpCommandPacket::get_values(
+                        rand::random(),
+                        self.thread_id,
+                        self.frame_id,
+                        &slots_in_scope,
+                    )?;
+                    client.send_cmd(JdwpPacket::CommandPacket(cmd))?;
+                    let Some(JdwpPacket::ReplyPacket(reply)) = client.wait_for_package().await else {
+                        bail!("Wrong answer");
+                    };
+                    error_code = reply.get_error();
+                    if error_code == 34 {
+                        continue;
+                    }
+                    log::debug!("Values: {:?}", reply);
+                    let mut reader = Cursor::new(reply.data);
+                    let number_of_values = reader.read_u32::<BigEndian>()?;
+                    if number_of_values != 1 {
+                        break;
+                    }
+                    
+                    let Ok(val) = SlotValue::from_bytes(&mut reader) else {break;};
+                    slot_values.push(val);
+                    
+                }
             }
+
             Ok(slot_values)
         })
     }
@@ -583,7 +611,7 @@ impl Thread {
         runtime: &Runtime,
     ) -> anyhow::Result<StackFrame> {
         runtime.block_on(async {
-            let cmd = JdwpCommandPacket::get_stack_frames(1, self.thread_id, 0, 1)?;
+            let cmd = JdwpCommandPacket::get_stack_frames(rand::random(), self.thread_id, 0, 1)?;
             client.send_cmd(JdwpPacket::CommandPacket(cmd))?;
             let response = client
                 .wait_for_package()
