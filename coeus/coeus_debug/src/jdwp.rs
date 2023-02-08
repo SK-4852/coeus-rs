@@ -570,6 +570,20 @@ impl JdwpClient {
         Ok(())
     }
 
+    pub fn get_class_name(&mut self, runtime: &Runtime, object_ref: u64) -> anyhow::Result<String> {
+        runtime.block_on(async {
+            // let ref_type = self
+            //     .get_reference_type(object_ref)
+            //     .await
+            //     .context("failed getting ref_type")?;
+            let signature = self
+                .get_object_signature(object_ref)
+                .await
+                .context("failed getting the signature")?;
+            Ok(signature)
+        })
+    }
+
     pub fn get_object(
         &mut self,
         runtime: &Runtime,

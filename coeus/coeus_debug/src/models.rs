@@ -348,7 +348,7 @@ impl ToBytes for JdwpPacket {
 pub struct StackFrame {
     pub thread_id: u64,
     pub frame_id: u64,
-    location: Location,
+    pub location: Location,
 }
 
 impl StackFrame {
@@ -387,7 +387,7 @@ impl StackFrame {
                 slot_idx: 0,
             }];
             let mut slot_values = vec![];
-            for i in (0..m.register_size).rev() {
+            for i in 0..m.register_size {
                 let mut error_code = 1;
                 let mut types_iterator = TYPES.iter();
                 while error_code != 0 && error_code != 35 {
@@ -479,6 +479,9 @@ impl SimpleEventData {
     ) -> anyhow::Result<&'class_lifetime Method> {
         class.get_method(self.location.method_id)
     }
+    pub fn get_class_id(&self) -> u64 {
+        self.location.class_id
+    }
 }
 
 impl FromBytes for SimpleEventData {
@@ -565,8 +568,8 @@ impl TryFrom<JdwpReplyPacket> for VariableTable {
 #[derive(Debug, Clone, Copy)]
 pub struct Location {
     ty: ClassType,
-    class_id: u64,
-    method_id: u64,
+    pub class_id: u64,
+    pub method_id: u64,
     pub code_index: u64,
 }
 impl FromBytes for Location {

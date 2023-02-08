@@ -17,7 +17,7 @@ use pyo3::{
     IntoPy, Py, PyAny, PyResult, Python, ToPyObject,
 };
 
-use crate::analysis::Method;
+use crate::{analysis::Method, parse::AnalyzeObject};
 
 #[pyclass]
 #[derive(Clone)]
@@ -241,10 +241,50 @@ impl DebuggerStackFrame {
                 slot_idx,
                 &slot_value.slot,
             )
-            .map_err(|e| PyRuntimeError::new_err(format!("Set value failed{}", e)))
+            .map_err(|e| PyRuntimeError::new_err(format!("Set value failed{e}",)))
+    }
+    pub fn get_code(&self, debugger: &mut Debugger, ao: &AnalyzeObject) -> PyResult<String> {
+        let class_name = self.get_class_name(debugger)?.replace('$', r"\$");
+        let method_name = self.get_method_name(debugger)?;
+        let code_index = self.get_code_index();
+        let location_class = ao.find_classes(&class_name)?;
+        if location_class.is_empty() {
+            return Err(PyRuntimeError::new_err("No class found"));
+        }
+        let location_class = &location_class[0];
+        let location_method = location_class.as_class()?.get_method(&method_name)?;
+        let code = location_method.code().replace(
+            &format!("#{code_index:#x}"),
+            &format!("#{code_index:#x} <==========="),
+        );
+        Ok(code)
     }
     pub fn get_code_index(&self) -> u64 {
         self.stack_frame.get_location().code_index
+    }
+    pub fn get_class_name(&self, debugger: &mut Debugger) -> PyResult<String> {
+        debugger
+            .jdwp_client
+            .get_class_name(&debugger.rt, self.stack_frame.location.class_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Could not get signature: {e}")))
+    }
+    pub fn get_method_name(&self, debugger: &mut Debugger) -> PyResult<String> {
+        let signature = debugger
+            .jdwp_client
+            .get_class_name(&debugger.rt, self.stack_frame.location.class_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Could not get signature: {e}")))?;
+        let classes = debugger
+            .jdwp_client
+            .get_class(&debugger.rt, &signature)
+            .map_err(|e| PyRuntimeError::new_err(format!("Could not get class: {e}")))?;
+        if classes.is_empty() {
+            return Err(PyRuntimeError::new_err("No class found"));
+        }
+        let class = &classes[0];
+        let method = class
+            .get_method(self.stack_frame.location.method_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Could not find method on class {e}")))?;
+        Ok(method.name.clone())
     }
     pub fn step(&self, debugger: &mut Debugger) -> PyResult<()> {
         let result = debugger
@@ -287,20 +327,22 @@ impl Debugger {
             Ok(c) => c,
             Err(e) => {
                 return Err(PyRuntimeError::new_err(format!(
-                    "Class command failed: {}",
-                    e
+                    "Class command failed: {e}",
                 )))
             }
         };
+        if class.is_empty() {
+            return Err(PyRuntimeError::new_err("Class not yet loaded"));
+        }
+
         let first = &class[0];
         println!("{first:?}");
-        let name_and_sig = method.signature().replace(&format!("{}->", class_name), "");
+        let name_and_sig = method.signature().replace(&format!("{class_name}->"), "");
         let cmd = match first.set_breakpoint(&name_and_sig, code_index) {
             Ok(cmd) => cmd,
             Err(e) => {
                 return Err(PyRuntimeError::new_err(format!(
-                    "Could not get breakpoint command {}",
-                    e
+                    "Could not get breakpoint command {e}",
                 )))
             }
         };
@@ -341,7 +383,6 @@ impl Debugger {
         let Ok(stack_frame) = thread.get_top_frame(&mut self.jdwp_client, &self.rt) else {
             return Err(PyRuntimeError::new_err("Could not get Stackframe"));
         };
-        // let values = sf.get_values(a, &mut self.jdwp_client, &self.rt);
 
         Ok(DebuggerStackFrame { stack_frame })
     }

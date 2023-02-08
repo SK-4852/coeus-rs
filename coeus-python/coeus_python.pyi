@@ -35,8 +35,17 @@ class DebuggerStackFrame:
         """Get the values of the current stack frame"""
     def set_value(self, debugger: Debugger,slot_idx: int, stackValue: StackValue):
         """Set `stackValue` into `slot_idx` of the current frame"""
+    def get_class_name(self,debugger: Debugger) -> str:
+        """Return the class name of the current stackframe's location"""
+    def get_method_name(self, debugger: Debugger) -> str:
+        """Return the method name of the current stackframe's location"""
     def get_code_index(self) -> int:
         """Return the code index of the current stackframe"""
+    def get_code(self, debugger: Debugger, ao: AnalyzeObject) -> str:
+        """Return the code and location of the current stackframe's location.
+           Throws if either class or method could not be found. This can happen if 
+           for example no method data is part of the APK (as for example all the Android Runtime stuff).
+        """
     def step(self, debugger: Debugger):
         """Step over"""
 class StackValue:

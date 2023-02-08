@@ -1464,7 +1464,7 @@ impl Class {
                 file: self.file.clone(),
                 class: self.class.clone(),
             })
-            .ok_or_else(|| PyRuntimeError::new_err("method not founud"))
+            .ok_or_else(|| PyRuntimeError::new_err("method not found"))
     }
 
     pub fn get_field(&self, name: &str) -> PyResult<DexField> {
