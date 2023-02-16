@@ -571,6 +571,7 @@ impl VM {
             log::debug!("PC: {}", u32::from(self.current_state.pc));
             self.current_state.current_instruction_size = InstructionSize(current_instruction.0.0 / 2);
             match &current_instruction.1 {
+                Instruction::ArbitraryData(_) => {}
                 Instruction::Switch(reg, table_offset) => {
                     let reg_data = if let Some(Register::Literal(reg)) = self.current_state.current_stackframe.get(*reg as usize) {reg} else {
                         return Err(VMException::RegisterNotFound((*reg) as usize));

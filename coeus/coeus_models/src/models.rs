@@ -30,6 +30,7 @@ pub use instruction::*;
 
 mod multidexfile;
 pub use multidexfile::*;
+use petgraph::dot::Dot;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 /// A Method as it is present in a Dex-File. The name is added for convenience, and to save a lookup in the string table.
@@ -590,6 +591,19 @@ impl PartialEq for MethodData {
 }
 
 impl MethodData {
+    pub fn get_instruction_graph(&self, file: &Arc<DexFile>) -> String {
+        let Some(cg) = self.call_graph.as_ref() else {
+            return String::new();
+        };
+        let mut cg = cg.clone();
+        let mut addr_label = HashMap::new();
+        for n in cg.node_weights_mut() {
+            let m =
+                n.1.disassembly_from_opcode(n.0 as i32, &mut addr_label, file.clone());
+            n.1 = Instruction::ArbitraryData(m);
+        }
+        format!("{:?}", Dot::new(&cg))
+    }
     pub fn get_disassembly(&self, file: &Arc<DexFile>) -> String {
         let mut lines = vec![];
         if let Some(proto) = file.protos.get(self.method.proto_idx as usize) {
@@ -776,7 +790,6 @@ pub struct AnnotationMethod {
     pub type_idx: u64,
     pub class_name: String,
     pub elements: Vec<AnnotationElementsData>,
-
 }
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AnnotationField {

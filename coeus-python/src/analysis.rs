@@ -1023,6 +1023,12 @@ impl Method {
         self.signature().hash(&mut hasher);
         hasher.finish()
     }
+    pub fn instruction_graph(&self) -> String {
+        let Some(md) = self.method_data.as_ref() else {
+            return String::new();
+        };
+        md.get_instruction_graph(&self.file)
+    }
     pub fn frida_hook(&self) -> String {
         let class_name = self.class.get_human_friendly_name();
         let (_, class_without_pkg) = class_name.rsplit_once('.').unwrap();

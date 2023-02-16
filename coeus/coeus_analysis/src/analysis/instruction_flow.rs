@@ -901,6 +901,7 @@ impl InstructionFlow {
             };
 
             match instruction.1 {
+                Instruction::ArbitraryData(_) => {}
                 // Flow Control
                 Instruction::Goto8(offset) => {
                     b.pc += offset as i32;
