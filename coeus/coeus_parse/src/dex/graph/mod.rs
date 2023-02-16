@@ -1,32 +1,22 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 //! This module provides functions to  register: (), is_argument: (), data: (), transformations: () register: (), is_argument: (), data: (), transformations: () register: (), is_argument: (), data: (), transformations: ()setup and work with graphs. Take a look a the `InfoNode` enum to get a feeling of what is contained in the graph. The `InfoNode` represents a Node-(Weight). The module also uses dex emulation to discover certain dynamic nodes, not directly present in the static dex file.
 
-
-pub mod information_graph;
-pub mod callgraph;
 pub mod analysis;
+pub mod callgraph;
+pub mod information_graph;
 
-
-
-
-use std::{
-    fmt::Debug,
-    collections::HashMap,
-    sync::{
-        Arc,
-    },
-};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use petgraph::{
     algo::kosaraju_scc,
     dot::Dot,
     graph::{DiGraph, NodeIndex},
-    visit::{Bfs},
+    visit::Bfs,
     Graph,
 };
 
@@ -86,6 +76,12 @@ impl Debug for InfoNode {
 pub struct Subgraph {
     pub super_sub_mapping: HashMap<NodeIndex, NodeIndex>,
     pub sub_graph: Graph<InfoNode, i32>,
+}
+
+impl Subgraph {
+    pub fn to_dot(&self) -> String {
+        format!("{:?}", Dot::new(&self.sub_graph))
+    }
 }
 
 // unsafe impl Send for Supergraph{}
@@ -264,23 +260,26 @@ pub fn find_incoming_arguments(
     nodes
 }
 
-
 /// Enum to track changes to the graph. This allows us to collect some changes in parallel and insert them sequentially (we need a lock on the graph)
 pub enum ChangeSet {
     /// Add a `node` to the graph and add an edge from `origin` to `node`
-    AddNodeTo { origin: NodeIndex, node: InfoNode, key: Option<String> },
+    AddNodeTo {
+        origin: NodeIndex,
+        node: InfoNode,
+        key: Option<String>,
+    },
     /// Add a `node` to the graph and an edge from `node` to destination
     AddNodeFrom {
         destination: NodeIndex,
         node: InfoNode,
-        key: Option<String>
+        key: Option<String>,
     },
     /// Add a `node to the graph and an edge from `origin` to `node` and `node` to `destination`
     AddNodeFromTo {
         origin: NodeIndex,
         destination: NodeIndex,
         node: InfoNode,
-        key: Option<String>
+        key: Option<String>,
     },
     /// Add an edge from `start` to `end`
     AddEdge { start: NodeIndex, end: NodeIndex },

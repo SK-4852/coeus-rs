@@ -20,7 +20,7 @@ use coeus::{
     coeus_emulation::vm::{runtime::StringClass, Register, Value, VM},
     coeus_models::models::{
         self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction,
-    },
+    }, coeus_parse::dex::graph::{Supergraph, callgraph::callgraph_for_method, Subgraph},
 };
 use pyo3::{
     exceptions::PyRuntimeError,
@@ -34,6 +34,12 @@ use crate::{
     parse::{AnalyzeObject, Runtime},
     vm::{DexVm, VmResult},
 };
+
+#[pyclass]
+pub struct Graph {
+    supergraph: Arc<Supergraph>,
+    subgraph: Option<Subgraph>
+}
 #[pyclass]
 /// Evidences represent found objects in the binaries. They can represent different objects
 pub struct Evidence {
@@ -1001,6 +1007,16 @@ impl DexString {
 }
 
 #[pymethods]
+impl Graph {
+    pub fn to_dot(&self) -> String {
+        let Some(s) = self.subgraph.as_ref() else {
+            return String::new();
+        };
+        s.to_dot()
+    }
+}
+
+#[pymethods]
 impl Method {
     pub fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -1012,6 +1028,38 @@ impl Method {
     }
     pub fn __repr__(&self) -> String {
         self.signature()
+    }
+
+    pub fn callgraph(&self, ao: &mut AnalyzeObject) -> PyResult<Graph> {
+        if ao.files.multi_dex[0].dex_file_from_identifier(&self.file.identifier).is_none() {
+             return Err(PyRuntimeError::new_err("Supergraph only supported on the main APK")); 
+        }
+        let supergraph = if let Some(sg) = ao.supergraph.as_ref() {
+            sg.clone()
+        } else {
+            let Ok(s) = ao.build_main_supergraph() else {
+                return Err(PyRuntimeError::new_err("Could not build supergraph"));
+            };
+            s
+        };
+        let method = self.method.clone();
+        let file = self.file.clone();
+            let type_name = file.get_type_name(method.class_idx).unwrap_or("UNKNOWN");
+            let fqdn = format!("{}->{}_{}", type_name, method.method_name, method.proto_name);
+            if let Some(method_key) = supergraph
+                .class_node_mapping
+                .keys()
+                .find(|k| k.contains(&fqdn))
+            {
+                let node_index = supergraph.class_node_mapping[method_key];
+                let g = callgraph_for_method(&supergraph.super_graph, node_index);
+                Ok(Graph {
+                    supergraph,
+                    subgraph: Some(g)
+                })
+            } else {
+                Err(PyRuntimeError::new_err("Method not found"))
+            }
     }
 
     pub fn get_argument_types_string(&self) -> Vec<String> {
@@ -1264,6 +1312,19 @@ impl Method {
                             let byte_array_arg: &[u8] = python_arg.extract()?;
                             if let Ok(instance) = vm.new_instance(
                                 "[B".to_string(),
+                                Value::Array(byte_array_arg.to_vec()),
+                            ) {
+                                vm_arguments.push(instance);
+                            } else {
+                                return Err(PyRuntimeError::new_err(
+                                    "Could not create instance of byte array",
+                                ));
+                            }
+                        }
+                         "[C" => {
+                            let byte_array_arg: &[u8] = python_arg.extract()?;
+                            if let Ok(instance) = vm.new_instance(
+                                "[C".to_string(),
                                 Value::Array(byte_array_arg.to_vec()),
                             ) {
                                 vm_arguments.push(instance);

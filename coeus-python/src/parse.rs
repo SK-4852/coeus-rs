@@ -4,17 +4,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::sync::Arc;
 use coeus::coeus_analysis::analysis::dex::get_native_methods;
 use coeus::coeus_analysis::analysis::{
-    find_any, find_classes, find_fields, find_methods, ALL_TYPES,
-    get_methods,
+    find_any, find_classes, find_fields, find_methods, get_methods, ALL_TYPES,
 };
 use coeus::coeus_models::models::{AndroidManifest, DexFile, Files};
+use coeus::coeus_parse::dex::graph::information_graph::build_information_graph;
+use coeus::coeus_parse::dex::graph::Supergraph;
 use pyo3::exceptions::{PyIOError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use regex::Regex;
+use std::sync::Arc;
 
 use crate::analysis::Method;
 
@@ -64,6 +65,44 @@ impl Dex {
 #[pyo3(text_signature = "(archive, build_graph, max_depth, /)")]
 pub struct AnalyzeObject {
     pub(crate) files: Files,
+    pub(crate) supergraph: Option<Arc<Supergraph>>,
+}
+const NON_INTERESTING_CLASSES: [&str; 15] = [
+    "Lj$/time",
+    "Lkotlin/",
+    "Lkotlinx/",
+    "Landroidx/",
+    "Lcom/sun",
+    "Landroid/app",
+    "Landroid/widget",
+    "Landroid/content",
+    "Landroid/graphics",
+    "Lcom/google/protobuf",
+    "Lcom/google/android",
+    "Lokhttp3/internal",
+    "okio",
+    "moshi",
+    "Lorg/bouncycastle/",
+];
+impl AnalyzeObject {
+    pub fn build_main_supergraph(&mut self) -> Result<Arc<Supergraph>, String> {
+        self.build_supergraph_for_multi_dex(0)
+    }
+    pub fn build_supergraph_for_multi_dex(
+        &mut self,
+        index: usize,
+    ) -> Result<Arc<Supergraph>, String> {
+        let c = Arc::new(self.files.binaries.clone());
+        if index >= self.files.multi_dex.len() {
+            return Err("Index out of bounds".to_string());
+        }
+        let Ok(supergraph) = build_information_graph(&self.files.multi_dex[0], c, &NON_INTERESTING_CLASSES, None, None) else {
+            return Err("Failed to build the graph".to_string());
+        };
+        let supergraph = Arc::new(supergraph);
+        self.supergraph = Some(supergraph.clone());
+        Ok(supergraph)
+    }
 }
 
 #[pymethods]
@@ -71,10 +110,14 @@ impl AnalyzeObject {
     #[new]
     pub fn new(archive: &str, build_graph: bool, max_depth: i64) -> PyResult<Self> {
         match coeus::coeus_parse::extraction::load_file(archive, build_graph, max_depth) {
-            Ok(files) => Ok(AnalyzeObject { files }),
+            Ok(files) => Ok(AnalyzeObject {
+                files,
+                supergraph: None,
+            }),
             Err(e) => Err(PyIOError::new_err(format!("{:?}", e))),
         }
     }
+
     pub fn get_runtime(&self, file: &Method) -> PyResult<Runtime> {
         let file_identifier = &file.file.identifier;
         if let Some(runtime_files) = self.files.multi_dex.iter().find(|a| {
@@ -104,19 +147,17 @@ impl AnalyzeObject {
     }
 
     pub fn get_file(&self, py: Python, name: &str) -> PyObject {
-		let mut _file_content: String;
-		let bin_object = self.files.binaries.get(name).unwrap();
+        let mut _file_content: String;
+        let bin_object = self.files.binaries.get(name).unwrap();
 
-		if name.ends_with(".xml") {
+        if name.ends_with(".xml") {
             let xml = self.files.decode_resource(bin_object.data()).unwrap();
             let result = xml.as_bytes();
             PyBytes::new(py, &result).into()
-		}
-		else {
-			let result = bin_object.data();
+        } else {
+            let result = bin_object.data();
             PyBytes::new(py, &result).into()
-		}
-
+        }
     }
 
     /// Find all dynamically registered native functions
@@ -145,32 +186,28 @@ impl AnalyzeObject {
     }
 
     pub fn get_file_names(&self) -> Vec<String> {
-		let mut results = vec![];
+        let mut results = vec![];
         for key in self.files.binaries.keys() {
             results.push(key.clone());
         }
-        results	
-	}
+        results
+    }
 
     pub fn get_dex_names(&self) -> Vec<&String> {
-	    let mut results = vec![];
-        
+        let mut results = vec![];
+
         for md in &self.files.multi_dex {
             results.push(&md.primary.file_name);
-            let res: Vec<&String> = md.secondary
-                .iter()
-                .map(|sec| &sec.file_name)
-                .collect();
+            let res: Vec<&String> = md.secondary.iter().map(|sec| &sec.file_name).collect();
             results.extend(res);
         }
         results
-	}
+    }
 
-        
     pub fn get_primary_dex(&self) -> Vec<Dex> {
         self.files
-			.multi_dex
-			.iter()
+            .multi_dex
+            .iter()
             .map(|a| Dex {
                 _file: a.primary.clone(),
                 dex_name: a.primary.get_dex_name().to_string().clone(),
@@ -217,7 +254,7 @@ impl AnalyzeObject {
                         results.push((key.clone(), xml.as_bytes().to_vec()));
                         continue;
                     }
-                } 
+                }
                 results.push((key.clone(), self.files.binaries[key].data().to_vec()));
             }
         }

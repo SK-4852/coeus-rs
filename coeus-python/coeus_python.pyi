@@ -172,9 +172,15 @@ class Instruction:
         """Try executing the instruction with the VM. This can help evaluate possible `const` functions or simple static string encryptors"""
     def get_function_name(self) -> str:
         """Return the name of the executing function, or throw a `RuntimeException` if this instruction is not a function call"""
+class Graph:
+    def to_dot(self) -> str:
+        """Get dotfile of the graph"""
 class Method:
     def name(self) -> str:
         """"Return the name of this function."""
+    def callgraph(self, ao: AnalyzeObject) -> Graph:
+        """Build a callgraph for the current method. We need the supergraph for the APK, 
+        if it is not already built, we build it and cache it in the AnalyzeObject"""
     def signature(self) -> str:
         """Return the fully qualified domain name inclusive the signature. This should uniquely identify the function within the dex context."""
     def proto_type(self) -> str:
