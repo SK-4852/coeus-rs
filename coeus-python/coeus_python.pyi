@@ -178,6 +178,8 @@ class Graph:
 class Method:
     def name(self) -> str:
         """"Return the name of this function."""
+    def frida_hook(self) -> str:
+        """Return a Frida-Hook for the current function"""
     def callgraph(self, ao: AnalyzeObject) -> Graph:
         """Build a callgraph for the current method. We need the supergraph for the APK, 
         if it is not already built, we build it and cache it in the AnalyzeObject"""

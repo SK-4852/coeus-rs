@@ -67,8 +67,9 @@ pub struct AnalyzeObject {
     pub(crate) files: Files,
     pub(crate) supergraph: Option<Arc<Supergraph>>,
 }
-const NON_INTERESTING_CLASSES: [&str; 15] = [
+const NON_INTERESTING_CLASSES: [&str; 16] = [
     "Lj$/time",
+    "Lj$/util/",
     "Lkotlin/",
     "Lkotlinx/",
     "Landroidx/",

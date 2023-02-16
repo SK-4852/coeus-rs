@@ -1023,6 +1023,28 @@ impl Method {
         self.signature().hash(&mut hasher);
         hasher.finish()
     }
+    pub fn frida_hook(&self) -> String {
+        let class_name = self.class.get_human_friendly_name();
+        let (_, class_without_pkg) = class_name.rsplit_once('.').unwrap();
+        let function_name = self.name();
+        let argument_length = self.get_argument_types_string().len();
+        let mut parameters = vec![];
+        let start = 'a';
+        for i in 0..argument_length {
+            parameters.push(((start as u8 + i as u8) as char).to_string())
+        }
+        let parameters = parameters.join(",");
+        let arguments = self.get_argument_types_string().into_iter().map(|a| format!(r#""{a}""#)).collect::<Vec<String>>().join(",");
+        format!(r#"
+const {class_without_pkg} = Java.use("{class_name}");
+const {function_name} = {class_without_pkg}.{function_name}.overload({arguments});
+{function_name}.implementation = function({parameters}) {{
+        console.log("Called {class_name}.{function_name}");
+        let ret = {function_name}.call(this, {parameters});
+        return ret
+    }}
+        "#)
+    }
     pub fn __richcmp__(&self, other: &Method, _op: pyo3::basic::CompareOp) -> bool {
         self.signature() == other.signature()
     }
@@ -1395,7 +1417,9 @@ impl Method {
 }
 
 pub(crate) fn friendly_name(name: &str) -> String {
-    let without_prefix = name.strip_prefix('L').unwrap_or_default();
+    let Some(without_prefix) = name.strip_prefix('L') else {
+        return name.to_string();
+    };
     let with_dots = without_prefix.replace('/', ".");
     with_dots.strip_suffix(';').unwrap_or_default().to_string()
 }
