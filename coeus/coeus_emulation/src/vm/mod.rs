@@ -773,6 +773,28 @@ impl VM {
                 Instruction::MulLongDst(_, _, _) => {
                     return Err(VMException::LinkerError);
                 }
+                &Instruction::DivInt(dst_a, b) => {
+                    let dst_a: u8 = dst_a.into();
+                    let b: u8 = b.into();
+                    self.binary_op(dst_a, dst_a, b, |a, b| Ok(a.wrapping_div(b)))?;
+                }
+                &Instruction::DivIntDst(dst, a, b) => {
+                    self.binary_op(dst, a, b, |a, b| Ok(a.wrapping_div(b)))?;
+                }
+                &Instruction::DivIntLit8(dst, a, lit) => {
+                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_div(b))?;
+                }
+                &Instruction::DivIntLit16(dst, a, lit) => {
+                    let dst: u16 = dst.into();
+                    let a: u16 = a.into();
+                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_div(b))?;
+                }
+                Instruction::DivLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::DivLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
 
                 &Instruction::SubInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
@@ -1446,6 +1468,7 @@ impl VM {
                     }
                 }
                 Instruction::InvokeStatic(arg_count, method_ref, argument_registers) => {
+                   
                     if self.stack_frames.len() > 20 {
                         return Err(VMException::StackOverflow);
                     }
@@ -1566,6 +1589,7 @@ impl VM {
                         );
                         //push new instructions
                         self.current_state.current_instructions = the_code_hash;
+                       
                         //self.execute((*method_ref) as u32,  0)?;
                         dex_file = self.current_state.current_dex_file.clone();
                         code_item = self.current_state.current_instructions.clone();
@@ -1602,8 +1626,25 @@ impl VM {
                 }
                 Instruction::ArrayData(_, _) => {}
 
-                Instruction::StaticGet(_, _) => {
-                    return Err(VMException::LinkerError);
+                &Instruction::StaticGet(dst, field_idx) => {
+                     let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {
+                        return Err(VMException::ClassNotFound(0));
+                    };
+                    let class_name = if let Some(c) = dex_file.get_type_name(field.class_idx as usize) {
+                        c.to_string()
+                    } else {
+                        return Err(VMException::ClassNotFound(field.class_idx as u16));
+                    };
+                    let field_name = format!("{}->{}", class_name, field.name);
+                    let Some((_, addr)) = self.instances.get(&field_name) else {
+                         return Err(VMException::LinkerError);
+                    };
+                   let Some(Value::Int(o)) = self.heap.get(addr) else {
+                        return Err(VMException::LinkerError);
+                   };
+                    let new_register =
+                                    Register::Literal(*o);
+                    self.update_register(dst, new_register)?;
                 }
                 Instruction::StaticGetWide(_, _) => {
                      return Err(VMException::LinkerError);
@@ -1777,7 +1818,26 @@ impl VM {
                 Instruction::StaticGetByte(_, _) => {}
                 Instruction::StaticGetChar(_, _) => {}
                 Instruction::StaticGetShort(_, _) => {}
-                Instruction::StaticPut(_, _) => {}
+                &Instruction::StaticPut(src, field_idx) => {
+                    let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {
+                        return Err(VMException::ClassNotFound(0));
+                    };
+                    let class_name = if let Some(c) = dex_file.get_class_by_type(field.class_idx as u32) {
+                        c.class_name.clone()
+                    } else {
+                        return Err(VMException::ClassNotFound(field.class_idx as u16));
+                    };
+                    let field_name = format!("{}->{}", class_name, field.name);
+                    if let Some(&Register::Literal(lit)) =
+                        self.current_state.current_stackframe.get(src as usize) {
+                            let reg = self.new_instance("".to_string(), Value::Int(lit))?;
+                            let entry = self.instances.entry(field_name).or_insert((NodeIndex::new(0), 0));
+                            let Register::Reference(_, addr) = reg else {
+                                 return Err(VMException::LinkerError);
+                            };
+                            entry.1 = addr;
+                    }
+                }
                 Instruction::StaticPutWide(_, _) => {}
                 &Instruction::StaticPutObject(src, field_idx) => {
                      let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {

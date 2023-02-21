@@ -54,13 +54,16 @@ impl UnsafeRegister {
         }
         if let Ok(b) = any.extract::<bool>(py) {
             return Ok(UnsafeRegister {
-                register: Register::Literal(if b {1} else {0})
-            })
+                register: Register::Literal(if b { 1 } else { 0 }),
+            });
         }
         if let Ok(int) = any.extract::<i32>(py) {
             return Ok(UnsafeRegister {
-                register: Register::Literal(int)
-            })
+                register: Register::Literal(int),
+            });
+        }
+        if let Ok(b) = any.extract::<Vec<u8>>(py) {
+            return Ok(unsafe_context.new_array(b));
         }
         Err(PyRuntimeError::new_err("Unknown type"))
     }
@@ -76,6 +79,14 @@ impl UnsafeContext {
                 StringClass::class_name().to_string(),
                 Value::Object(StringClass::new(s.to_string())),
             )
+            .expect("Could not create string");
+        UnsafeRegister { register }
+    }
+    fn new_array(&mut self, array: Vec<u8>) -> UnsafeRegister {
+        let ctx = unsafe { &mut *self.vm_ptr };
+
+        let register = ctx
+            .new_instance("[B".to_string(), Value::Array(array))
             .expect("Could not create string");
         UnsafeRegister { register }
     }
