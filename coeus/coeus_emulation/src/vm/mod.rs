@@ -104,7 +104,7 @@ pub enum InternalObject {
 
 #[derive(Clone, Debug)]
 pub struct ClassInstance {
-    internal_state: HashMap<String, InternalObject>,
+    pub internal_state: HashMap<String, InternalObject>,
     pub instances: HashMap<String, u32>,
     pub class: Arc<Class>,
 }
@@ -164,7 +164,7 @@ impl ClassInstance{
 /// Represents a virtual Dex Machine
 #[derive(Clone)]
 pub struct VM {
-    current_state: VMState,
+    pub current_state: VMState,
     stack_frames: Vec<VMState>,
     heap: HashMap<u32, Value>,
     instances: HashMap<String, (NodeIndex, u32)>,
@@ -230,6 +230,12 @@ use rand::SeedableRng;
 impl VM {
     pub fn get_heap(&self) -> HashMap<u32, Value> {
         self.heap.clone()
+    }
+    pub fn get_heap_ref(& self) -> &HashMap<u32, Value> {
+        &self.heap
+    }
+    pub fn get_heap_mut(&mut self) -> &mut HashMap<u32, Value> {
+        &mut self.heap
     }
      pub fn get_instances(&self) -> HashMap<String, (NodeIndex, u32)> {
         self.instances.clone()

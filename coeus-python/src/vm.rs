@@ -9,7 +9,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use coeus::coeus_emulation::vm::{dynamic_runtime::Invokable, ClassInstance, Register, Value, VM};
+use coeus::coeus_emulation::vm::{
+    dynamic_runtime::Invokable, runtime::StringClass, ClassInstance, InternalObject, Register,
+    Value, VM,
+};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
 use crate::parse::AnalyzeObject;
@@ -36,11 +39,100 @@ pub struct UnsafeContext {
     args: Vec<Register>,
 }
 
+#[pyclass]
+#[derive(Clone)]
+pub struct UnsafeRegister {
+    register: Register,
+}
+
+#[pymethods]
+impl UnsafeRegister {
+    #[new]
+    pub fn new(py: Python, any: Py<PyAny>, unsafe_context: &mut UnsafeContext) -> PyResult<Self> {
+        if let Ok(s) = any.extract::<&str>(py) {
+            return Ok(unsafe_context.new_string(s));
+        }
+        if let Ok(b) = any.extract::<bool>(py) {
+            return Ok(UnsafeRegister {
+                register: Register::Literal(if b {1} else {0})
+            })
+        }
+        if let Ok(int) = any.extract::<i32>(py) {
+            return Ok(UnsafeRegister {
+                register: Register::Literal(int)
+            })
+        }
+        Err(PyRuntimeError::new_err("Unknown type"))
+    }
+}
+
 #[pymethods]
 impl UnsafeContext {
-    pub fn get_reference(&mut self, addr: u32) -> String {
+    fn new_string(&mut self, s: &str) -> UnsafeRegister {
         let ctx = unsafe { &mut *self.vm_ptr };
-        format!("Heap: {:?}", ctx.get_instances())
+
+        let register = ctx
+            .new_instance(
+                StringClass::class_name().to_string(),
+                Value::Object(StringClass::new(s.to_string())),
+            )
+            .expect("Could not create string");
+        UnsafeRegister { register }
+    }
+    fn get_string_from_heap(&self, addr: UnsafeRegister) -> PyResult<String> {
+        let ctx = unsafe { &mut *self.vm_ptr };
+        let the_heap = ctx.get_heap_ref();
+        let Register::Reference(_name, addr) = addr.register else {
+            return Err(PyRuntimeError::new_err("Wrong register type"));
+        };
+        let Some(Value::Object(obj)) = the_heap.get(&addr) else {
+            return Err(PyRuntimeError::new_err("Object not found"));
+        };
+        let Some(InternalObject::String(string)) = obj.internal_state.get("tmp_string") else {
+            return Err(PyRuntimeError::new_err("Object not a string"));
+        };
+        Ok(string.to_string())
+    }
+    fn get_array_from_heap(&self, addr: UnsafeRegister) -> PyResult<Vec<u8>> {
+        let ctx = unsafe { &mut *self.vm_ptr };
+        let the_heap = ctx.get_heap_ref();
+        let Register::Reference(_name, addr) = addr.register else {
+            return Err(PyRuntimeError::new_err("Wrong register type"));
+        };
+        let Some(Value::Array(a)) = the_heap.get(&addr) else {
+            return Err(PyRuntimeError::new_err("Object not found"));
+        };
+
+        Ok(a.clone())
+    }
+    pub fn set_result(&self, register: UnsafeRegister) {
+        let ctx = unsafe { &mut *self.vm_ptr };
+        ctx.current_state.return_reg = register.register;
+    }
+    pub fn get_value(&self, py: Python, register: UnsafeRegister) -> PyResult<Py<PyAny>> {
+        match &register.register {
+            Register::Literal(lit) => Ok(lit.into_py(py)),
+            Register::LiteralWide(lit) => Ok(lit.into_py(py)),
+            Register::Reference(name, _) if name == "Ljava/lang/String;" => {
+                Ok(self.get_string_from_heap(register)?.into_py(py))
+            }
+            Register::Reference(name, _) if name == "[B" => {
+                Ok(self.get_array_from_heap(register)?.into_py(py))
+            }
+            Register::Reference(name, _) if name == "[C" => {
+                Ok(self.get_array_from_heap(register)?.into_py(py))
+            }
+            _ => Ok(register.into_py(py)),
+        }
+    }
+    pub fn get_arguments(&self) -> PyResult<Vec<UnsafeRegister>> {
+        Ok(self
+            .args
+            .iter()
+            .map(|r| UnsafeRegister {
+                register: r.clone(),
+            })
+            .collect())
     }
 }
 
@@ -56,7 +148,7 @@ impl DynamicPythonClass {
     pub fn new(class_name: &str, py_class: Py<PyAny>) -> Self {
         DynamicPythonClass {
             class_name: class_name.to_string(),
-            py_class
+            py_class,
         }
     }
 }
@@ -71,9 +163,11 @@ impl Invokable for DynamicPythonClass {
             let args = args.to_vec();
             let unsafe_context = UnsafeContext { vm_ptr: vm, args };
             let unsafe_context = unsafe_context.into_py(py);
-       
+
             let py_model = self.py_class.as_ref(py);
-            py_model.call_method(fn_name, (unsafe_context,), None).unwrap();
+            py_model
+                .call_method(fn_name, (unsafe_context,), None)
+                .unwrap();
         });
         Ok(())
     }
@@ -165,7 +259,8 @@ impl DexVm {
     }
 
     pub fn register_class(&mut self, clazz: DynamicPythonClass) {
-        VM::register_class(&clazz.class_name.to_string(), Box::new(clazz)).expect("Could not register");
+        VM::register_class(&clazz.class_name.to_string(), Box::new(clazz))
+            .expect("Could not register");
     }
 
     pub fn get_current_state(&self) -> String {
@@ -201,5 +296,6 @@ pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<DexVm>()?;
     m.add_class::<DynamicPythonClass>()?;
     m.add_class::<UnsafeContext>()?;
+    m.add_class::<UnsafeRegister>()?;
     Ok(())
 }

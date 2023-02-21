@@ -9,7 +9,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{runtime::invoke_runtime_with_method, Register, VMException, VM};
+use super::{Register, VMException, VM};
 use coeus_models::models::{DexFile, Method};
 use lazy_static::lazy_static;
 
