@@ -19,6 +19,7 @@ use self::runtime::{invoke_runtime, StringClass, invoke_runtime_with_method};
 use coeus_models::models::{BinaryObject, Class, CodeItem, DexFile, Instruction, MethodData, ValueType, InstructionOffset, InstructionSize, Method};
 
 pub mod runtime;
+pub mod dynamic_runtime;
 
 use runtime::VM_BUILTINS;
 
@@ -1510,7 +1511,7 @@ impl VM {
 
                     self.current_state.current_method_index = *method_ref as u32;
                     method_idx = self.current_state.current_method_index;
-
+                    
                     if let Ok((file, the_code)) = self.get_method(&dex_file, *method_ref as u32) {
                         let method_name =&the_code.name;
                         let access_flags = &the_code.access_flags;
@@ -2032,6 +2033,9 @@ impl VM {
         method_idx: u32,
         arguments: Vec<Register>,
     ) -> Result<(), VMException> {
+        if self.invoke_dynamic_runtime(dex_file.clone(), method_idx, &arguments).is_ok() {
+            return Ok(());
+        }
         invoke_runtime(self, dex_file, method_idx, arguments)?;
         Ok(())
     }
@@ -2041,6 +2045,9 @@ impl VM {
         method: Arc<Method>,
         arguments: Vec<Register>,
     ) -> Result<(), VMException> {
+        if self.invoke_dynamic_runtime_with_method(class_name, method.clone(), &arguments).is_ok() {
+            return Ok(());
+        }
         invoke_runtime_with_method(self, class_name, method, arguments)?;
         Ok(())
     }

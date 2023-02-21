@@ -1,17 +1,15 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-
 
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-use coeus::coeus_emulation::vm::{ClassInstance, Register, Value, VM};
+use coeus::coeus_emulation::vm::{dynamic_runtime::Invokable, ClassInstance, Register, Value, VM};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
 use crate::parse::AnalyzeObject;
@@ -27,6 +25,58 @@ pub struct DexVm {
 pub struct VmResult {
     pub(crate) data: Value,
     pub(crate) vm: DexVm,
+}
+
+// method(arg1, arg2, arg3) =>
+
+#[pyclass(unsendable)]
+#[derive(Clone)]
+pub struct UnsafeContext {
+    vm_ptr: *mut VM,
+    args: Vec<Register>,
+}
+
+#[pymethods]
+impl UnsafeContext {
+    pub fn get_reference(&mut self, addr: u32) -> String {
+        let ctx = unsafe { &mut *self.vm_ptr };
+        format!("Heap: {:?}", ctx.get_instances())
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct DynamicPythonClass {
+    class_name: String,
+    py_class: Py<PyAny>,
+}
+#[pymethods]
+impl DynamicPythonClass {
+    #[new]
+    pub fn new(class_name: &str, py_class: Py<PyAny>) -> Self {
+        DynamicPythonClass {
+            class_name: class_name.to_string(),
+            py_class
+        }
+    }
+}
+impl Invokable for DynamicPythonClass {
+    fn call(
+        &self,
+        fn_name: &str,
+        vm: &mut VM,
+        args: &[Register],
+    ) -> Result<(), coeus::coeus_emulation::vm::VMException> {
+        Python::with_gil(|py| {
+            let args = args.to_vec();
+            let unsafe_context = UnsafeContext { vm_ptr: vm, args };
+            let unsafe_context = unsafe_context.into_py(py);
+       
+            let py_model = self.py_class.as_ref(py);
+            py_model.call_method(fn_name, (unsafe_context,), None).unwrap();
+        });
+        Ok(())
+    }
 }
 
 #[pymethods]
@@ -114,6 +164,10 @@ impl DexVm {
         }
     }
 
+    pub fn register_class(&mut self, clazz: DynamicPythonClass) {
+        VM::register_class(&clazz.class_name.to_string(), Box::new(clazz)).expect("Could not register");
+    }
+
     pub fn get_current_state(&self) -> String {
         format!("{:?}", self.vm.lock().unwrap().get_current_state())
     }
@@ -145,5 +199,7 @@ impl DexVm {
 
 pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<DexVm>()?;
+    m.add_class::<DynamicPythonClass>()?;
+    m.add_class::<UnsafeContext>()?;
     Ok(())
 }
