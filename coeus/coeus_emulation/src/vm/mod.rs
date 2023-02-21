@@ -19,6 +19,7 @@ use self::runtime::{invoke_runtime, StringClass, invoke_runtime_with_method};
 use coeus_models::models::{BinaryObject, Class, CodeItem, DexFile, Instruction, MethodData, ValueType, InstructionOffset, InstructionSize, Method};
 
 pub mod runtime;
+pub mod dynamic_runtime;
 
 use runtime::VM_BUILTINS;
 
@@ -103,7 +104,7 @@ pub enum InternalObject {
 
 #[derive(Clone, Debug)]
 pub struct ClassInstance {
-    internal_state: HashMap<String, InternalObject>,
+    pub internal_state: HashMap<String, InternalObject>,
     pub instances: HashMap<String, u32>,
     pub class: Arc<Class>,
 }
@@ -163,7 +164,7 @@ impl ClassInstance{
 /// Represents a virtual Dex Machine
 #[derive(Clone)]
 pub struct VM {
-    current_state: VMState,
+    pub current_state: VMState,
     stack_frames: Vec<VMState>,
     heap: HashMap<u32, Value>,
     instances: HashMap<String, (NodeIndex, u32)>,
@@ -229,6 +230,12 @@ use rand::SeedableRng;
 impl VM {
     pub fn get_heap(&self) -> HashMap<u32, Value> {
         self.heap.clone()
+    }
+    pub fn get_heap_ref(& self) -> &HashMap<u32, Value> {
+        &self.heap
+    }
+    pub fn get_heap_mut(&mut self) -> &mut HashMap<u32, Value> {
+        &mut self.heap
     }
      pub fn get_instances(&self) -> HashMap<String, (NodeIndex, u32)> {
         self.instances.clone()
@@ -764,6 +771,28 @@ impl VM {
                     return Err(VMException::LinkerError);
                 }
                 Instruction::MulLongDst(_, _, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                &Instruction::DivInt(dst_a, b) => {
+                    let dst_a: u8 = dst_a.into();
+                    let b: u8 = b.into();
+                    self.binary_op(dst_a, dst_a, b, |a, b| Ok(a.wrapping_div(b)))?;
+                }
+                &Instruction::DivIntDst(dst, a, b) => {
+                    self.binary_op(dst, a, b, |a, b| Ok(a.wrapping_div(b)))?;
+                }
+                &Instruction::DivIntLit8(dst, a, lit) => {
+                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_div(b))?;
+                }
+                &Instruction::DivIntLit16(dst, a, lit) => {
+                    let dst: u16 = dst.into();
+                    let a: u16 = a.into();
+                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_div(b))?;
+                }
+                Instruction::DivLong(_, _) => {
+                    return Err(VMException::LinkerError);
+                }
+                Instruction::DivLongDst(_, _, _) => {
                     return Err(VMException::LinkerError);
                 }
 
@@ -1439,6 +1468,7 @@ impl VM {
                     }
                 }
                 Instruction::InvokeStatic(arg_count, method_ref, argument_registers) => {
+                   
                     if self.stack_frames.len() > 20 {
                         return Err(VMException::StackOverflow);
                     }
@@ -1510,7 +1540,7 @@ impl VM {
 
                     self.current_state.current_method_index = *method_ref as u32;
                     method_idx = self.current_state.current_method_index;
-
+                    
                     if let Ok((file, the_code)) = self.get_method(&dex_file, *method_ref as u32) {
                         let method_name =&the_code.name;
                         let access_flags = &the_code.access_flags;
@@ -1559,6 +1589,7 @@ impl VM {
                         );
                         //push new instructions
                         self.current_state.current_instructions = the_code_hash;
+                       
                         //self.execute((*method_ref) as u32,  0)?;
                         dex_file = self.current_state.current_dex_file.clone();
                         code_item = self.current_state.current_instructions.clone();
@@ -1595,8 +1626,25 @@ impl VM {
                 }
                 Instruction::ArrayData(_, _) => {}
 
-                Instruction::StaticGet(_, _) => {
-                    return Err(VMException::LinkerError);
+                &Instruction::StaticGet(dst, field_idx) => {
+                     let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {
+                        return Err(VMException::ClassNotFound(0));
+                    };
+                    let class_name = if let Some(c) = dex_file.get_type_name(field.class_idx as usize) {
+                        c.to_string()
+                    } else {
+                        return Err(VMException::ClassNotFound(field.class_idx as u16));
+                    };
+                    let field_name = format!("{}->{}", class_name, field.name);
+                    let Some((_, addr)) = self.instances.get(&field_name) else {
+                         return Err(VMException::LinkerError);
+                    };
+                   let Some(Value::Int(o)) = self.heap.get(addr) else {
+                        return Err(VMException::LinkerError);
+                   };
+                    let new_register =
+                                    Register::Literal(*o);
+                    self.update_register(dst, new_register)?;
                 }
                 Instruction::StaticGetWide(_, _) => {
                      return Err(VMException::LinkerError);
@@ -1770,7 +1818,26 @@ impl VM {
                 Instruction::StaticGetByte(_, _) => {}
                 Instruction::StaticGetChar(_, _) => {}
                 Instruction::StaticGetShort(_, _) => {}
-                Instruction::StaticPut(_, _) => {}
+                &Instruction::StaticPut(src, field_idx) => {
+                    let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {
+                        return Err(VMException::ClassNotFound(0));
+                    };
+                    let class_name = if let Some(c) = dex_file.get_class_by_type(field.class_idx as u32) {
+                        c.class_name.clone()
+                    } else {
+                        return Err(VMException::ClassNotFound(field.class_idx as u16));
+                    };
+                    let field_name = format!("{}->{}", class_name, field.name);
+                    if let Some(&Register::Literal(lit)) =
+                        self.current_state.current_stackframe.get(src as usize) {
+                            let reg = self.new_instance("".to_string(), Value::Int(lit))?;
+                            let entry = self.instances.entry(field_name).or_insert((NodeIndex::new(0), 0));
+                            let Register::Reference(_, addr) = reg else {
+                                 return Err(VMException::LinkerError);
+                            };
+                            entry.1 = addr;
+                    }
+                }
                 Instruction::StaticPutWide(_, _) => {}
                 &Instruction::StaticPutObject(src, field_idx) => {
                      let field = if let Some(field) = dex_file.fields.get(field_idx as usize) {field} else {
@@ -2032,6 +2099,9 @@ impl VM {
         method_idx: u32,
         arguments: Vec<Register>,
     ) -> Result<(), VMException> {
+        if self.invoke_dynamic_runtime(dex_file.clone(), method_idx, &arguments).is_ok() {
+            return Ok(());
+        }
         invoke_runtime(self, dex_file, method_idx, arguments)?;
         Ok(())
     }
@@ -2041,6 +2111,9 @@ impl VM {
         method: Arc<Method>,
         arguments: Vec<Register>,
     ) -> Result<(), VMException> {
+        if self.invoke_dynamic_runtime_with_method(class_name, method.clone(), &arguments).is_ok() {
+            return Ok(());
+        }
         invoke_runtime_with_method(self, class_name, method, arguments)?;
         Ok(())
     }

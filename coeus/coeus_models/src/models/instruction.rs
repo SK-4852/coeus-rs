@@ -62,6 +62,13 @@ pub enum Instruction {
     MulLong(u4, u4),
     MulLongDst(u8, u8, u8),
 
+    DivInt(u4, u4),
+    DivIntDst(u8, u8, u8),
+    DivIntLit8(u8, u8, u8),
+    DivIntLit16(u4, u4, u16),
+    DivLong(u4, u4),
+    DivLongDst(u8, u8, u8),
+
     AndInt(u4, u4),
     AndIntDst(u8, u8, u8),
     AndIntLit8(u8, u8, u8),
@@ -214,6 +221,15 @@ impl Debug for Instruction {
             Self::MulIntLit16(arg0, arg1, arg2) => f.debug_tuple("MulIntLit16").field(arg0).field(arg1).field(arg2).finish(),
             Self::MulLong(arg0, arg1) => f.debug_tuple("MulLong").field(arg0).field(arg1).finish(),
             Self::MulLongDst(arg0, arg1, arg2) => f.debug_tuple("MulLongDst").field(arg0).field(arg1).field(arg2).finish(),
+
+             Self::DivInt(arg0, arg1) => f.debug_tuple("DivInt").field(arg0).field(arg1).finish(),
+            Self::DivIntDst(arg0, arg1, arg2) => f.debug_tuple("DivIntDst").field(arg0).field(arg1).field(arg2).finish(),
+            Self::DivIntLit8(arg0, arg1, arg2) => f.debug_tuple("DivIntLit8").field(arg0).field(arg1).field(arg2).finish(),
+            Self::DivIntLit16(arg0, arg1, arg2) => f.debug_tuple("DivIntLit16").field(arg0).field(arg1).field(arg2).finish(),
+            Self::DivLong(arg0, arg1) => f.debug_tuple("DivLong").field(arg0).field(arg1).finish(),
+            Self::DivLongDst(arg0, arg1, arg2) => f.debug_tuple("DivLongDst").field(arg0).field(arg1).field(arg2).finish(),
+
+
             Self::AndInt(arg0, arg1) => f.debug_tuple("AndInt").field(arg0).field(arg1).finish(),
             Self::AndIntDst(arg0, arg1, arg2) => f.debug_tuple("AndIntDst").field(arg0).field(arg1).field(arg2).finish(),
             Self::AndIntLit8(arg0, arg1, arg2) => f.debug_tuple("AndIntLit8").field(arg0).field(arg1).field(arg2).finish(),
@@ -1225,6 +1241,13 @@ impl Instruction {
             0xbd => Instruction::MulLong(u4::new(high & 0b1111), u4::new(high >> 4)),
             0xd2 => Instruction::MulIntLit16(u4::new(high & 0b1111), u4::new(high >> 4), data[0]),
             0xda => Instruction::MulIntLit8(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
+
+            0x93 => Instruction::DivIntDst(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
+            0x9e => Instruction::DivLongDst(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
+            0xb3 => Instruction::DivInt(u4::new(high & 0b1111), u4::new(high >> 4)),
+            0xbe => Instruction::DivLong(u4::new(high & 0b1111), u4::new(high >> 4)),
+            0xd3 => Instruction::DivIntLit16(u4::new(high & 0b1111), u4::new(high >> 4), data[0]),
+            0xdb => Instruction::DivIntLit8(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
 
             0x91 => Instruction::SubIntDst(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
             0x9c => Instruction::SubLongDst(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),

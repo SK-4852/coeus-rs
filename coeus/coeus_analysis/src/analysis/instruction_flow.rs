@@ -7,7 +7,7 @@
 use std::{
     collections::HashMap,
     fmt::Display,
-    ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Mul, Rem, Shl, Shr, Sub},
+    ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub},
     sync::Arc,
 };
 
@@ -35,7 +35,7 @@ pub struct Branch {
     pub pc: InstructionOffset,
     pub state: State,
     pub previous_pc: InstructionOffset,
-    pub finished: bool
+    pub finished: bool,
 }
 impl Default for Branch {
     fn default() -> Self {
@@ -45,7 +45,7 @@ impl Default for Branch {
             pc: InstructionOffset(0),
             previous_pc: InstructionOffset(0),
             state: Default::default(),
-            finished: false
+            finished: false,
         }
     }
 }
@@ -680,6 +680,53 @@ impl<'a> Mul<i128> for &'a Value {
         Value::Number(lhs * rhs)
     }
 }
+impl<'a> Div for &'a Value {
+    type Output = Value;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        let lhs = if let Some(n) = self.try_get_number() {
+            n
+        } else if matches!(self, Value::Variable { .. }) {
+            return Value::Variable(Box::new(LastInstruction::BinaryOperation {
+                left: self.clone(),
+                right: rhs.clone(),
+                operation: |left, right| left / right,
+            }));
+        } else {
+            return Value::Invalid;
+        };
+        let rhs = if let Some(n) = rhs.try_get_number() {
+            n
+        } else if matches!(rhs, Value::Variable { .. }) {
+            return Value::Variable(Box::new(LastInstruction::BinaryOperation {
+                left: self.clone(),
+                right: rhs.clone(),
+                operation: |left, right| left / right,
+            }));
+        } else {
+            return Value::Invalid;
+        };
+        Value::Number(lhs * rhs)
+    }
+}
+impl<'a> Div<i128> for &'a Value {
+    type Output = Value;
+
+    fn div(self, rhs: i128) -> Self::Output {
+        let lhs = if let Some(n) = self.try_get_number() {
+            n
+        } else if matches!(self, Value::Variable { .. }) {
+            return Value::Variable(Box::new(LastInstruction::BinaryOperation {
+                left: self.clone(),
+                right: Value::Number(rhs),
+                operation: |left, right| left * right,
+            }));
+        } else {
+            return Value::Invalid;
+        };
+        Value::Number(lhs / rhs)
+    }
+}
 impl<'a> Shl for &'a Value {
     type Output = Value;
 
@@ -1130,6 +1177,26 @@ impl InstructionFlow {
                 Instruction::MulIntLit16(dst, left, lit) => {
                     b.state.registers[u8::from(dst) as usize] =
                         &b.state.registers[u8::from(left) as usize] * (lit as i128)
+                }
+
+                Instruction::DivInt(left, right) | Instruction::DivLong(left, right) => {
+                    b.state.registers[u8::from(left) as usize] = &b.state.registers
+                        [u8::from(left) as usize]
+                        / &b.state.registers[u8::from(right) as usize]
+                }
+                Instruction::DivIntDst(dst, left, right)
+                | Instruction::DivLongDst(dst, left, right) => {
+                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                        [u8::from(left) as usize]
+                        / &b.state.registers[u8::from(right) as usize]
+                }
+                Instruction::DivIntLit8(dst, left, lit) => {
+                    b.state.registers[u8::from(dst) as usize] =
+                        &b.state.registers[u8::from(left) as usize] / (lit as i128)
+                }
+                Instruction::DivIntLit16(dst, left, lit) => {
+                    b.state.registers[u8::from(dst) as usize] =
+                        &b.state.registers[u8::from(left) as usize] / (lit as i128)
                 }
 
                 Instruction::AndInt(left, right) | Instruction::AndLong(left, right) => {
@@ -1620,7 +1687,7 @@ impl InstructionFlow {
                 tainted: false,
                 loop_count: HashMap::new(),
             },
-            finished: false
+            finished: false,
         });
     }
     fn fork(&mut self, mut branch: Branch) -> u64 {
