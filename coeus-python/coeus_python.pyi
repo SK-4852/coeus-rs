@@ -1,16 +1,15 @@
 # Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-# 
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
 
 from tokenize import String
 from typing import Any, Optional
 from xmlrpc.client import boolean
 
 class Debugger:
-    def __init__(self, host:str, port:int):
+    def __init__(self, host: str, port: int):
         """Init a new Debugger and try to connect over TCP"""
     def set_breakpoint(self, method: Method, code_index: int):
         """Sets a breakpoint on the specified method at the specified code_index. The index is normally the instruction offset"""
@@ -18,24 +17,27 @@ class Debugger:
         """Resume a stopped debugger"""
     def wait_for_package(self) -> DebuggerStackFrame:
         """Performs a blocking wait for a debugger package and tries to get the stackframe from it"""
-    def new_string(self, string:str) -> StackValue:
+    def new_string(self, string: str) -> StackValue:
         """Create a new string on the VM"""
     def get_code_indices(self, method: Method) -> list[int]:
         """Get valid code indices from function"""
     def get_breakpoints(self) -> list[VmBreakpoint]:
         """Get all currently set breakpoints"""
+
 class VmInstance:
     def to_string(self, debugger: Debugger) -> str:
         """Get a string representation of the object"""
+
 class VmBreakpoint:
     def location(self) -> str:
         """Get the location identifier for this breakpoint"""
+
 class DebuggerStackFrame:
     def get_values_for(self, debugger: Debugger, method: Method) -> list[StackValue]:
         """Get the values of the current stack frame"""
-    def set_value(self, debugger: Debugger,slot_idx: int, stackValue: StackValue):
+    def set_value(self, debugger: Debugger, slot_idx: int, stackValue: StackValue):
         """Set `stackValue` into `slot_idx` of the current frame"""
-    def get_class_name(self,debugger: Debugger) -> str:
+    def get_class_name(self, debugger: Debugger) -> str:
         """Return the class name of the current stackframe's location"""
     def get_method_name(self, debugger: Debugger) -> str:
         """Return the method name of the current stackframe's location"""
@@ -43,13 +45,14 @@ class DebuggerStackFrame:
         """Return the code index of the current stackframe"""
     def get_code(self, debugger: Debugger, ao: AnalyzeObject) -> str:
         """Return the code and location of the current stackframe's location.
-           Throws if either class or method could not be found. This can happen if 
-           for example no method data is part of the APK (as for example all the Android Runtime stuff).
+        Throws if either class or method could not be found. This can happen if
+        for example no method data is part of the APK (as for example all the Android Runtime stuff).
         """
     def step(self, debugger: Debugger):
         """Step over"""
+
 class StackValue:
-    def __init__(self, debugger: Debugger, value: Any, oldValue:Optional[StackValue]):
+    def __init__(self, debugger: Debugger, value: Any, oldValue: Optional[StackValue]):
         """Initialize a new stack value, optional trying to fit the old value's type"""
     def get_value(self, debugger: Debugger) -> Any:
         """Get the value from the frame. If it is a primitive type or a string we get the actual value, else we just get the VM object reference id"""
@@ -57,12 +60,13 @@ class StackValue:
 class Flow:
     def __init__(self, m: Method):
         """Construct a new static analysis flow"""
-    def reset(self, start = 0):
+    def reset(self, start=0):
         """Reset the state of the flow and start over (with PC = start)"""
     def next_instruction(self):
         """Step one instruction over, this throws if the flow is finished"""
     def get_state(self) -> list[FlowBranch]:
         """Get a list of all current branches"""
+
 class FlowBranch:
     def get_state(self) -> FlowState:
         """Get the state of the current branch"""
@@ -70,9 +74,11 @@ class FlowBranch:
         """Get current PC"""
     def get_current_instruction(self) -> str:
         """Print the current instruction"""
+
 class FlowState:
     def print_state(self) -> str:
         """Print the current state"""
+
 class Branching:
     def has_dead_branch(self) -> bool:
         """Check if there are any dead branches"""
@@ -80,16 +86,47 @@ class Branching:
         """Get the branch offset from the respective branch point"""
     def get_method(self) -> Method:
         """Get the method the branching happens"""
+
 class Manifest:
     def get_xml(self) -> str:
         """Return the content of the AndroidManifest as found in the APK"""
     def get_json(self) -> str:
         """If the XML could be parsed as an object, return the corresponding JSON representation"""
+
 class Runtime:
     pass
+
+class UnsafeRegister:
+    def __init__(self, any: Any, unsafeContext: UnsafeContext):
+        """Convert the python object to the corresponding VM-Type and return a `UnsafeRegister`"""
+
+class UnsafeContext:
+    """This context should only ever be used as a argument, for the from rust invoked function. It needs a locked VM-instance (does not check if it is actually locked)."""
+
+    def new_string(self, string: str) -> UnsafeRegister:
+        """Creates a new string in the VM and returns the corresponding register wrapper"""
+    def new_array(self, string: str) -> UnsafeRegister:
+        """Creates a new array in the VM and returns the corresponding register wrapper"""
+    def get_string_from_heap(self, addr: UnsafeRegister) -> str:
+        """Get a string from the (VM-)heap"""
+    def get_array_from_heap(self, addr: UnsafeRegister) -> bytes:
+        """Get an array from the (VM-)heap"""
+    def set_result(self, register: UnsafeRegister):
+        """Set the result register of the VM. This corresponds to the return value of the function."""
+    def get_value(self, register: UnsafeRegister) -> Any:
+        """Get the value from the register and convert it to a python object"""
+    def get_arguments(self) -> list[UnsafeRegister]:
+        "Get all arguments for this function call"
+
+class DynamicPythonClass:
+    def __init__(self, className: str, pyClass: Any):
+        """Initialize the Wrapper with a class, which has callable functions. The class will be registered as `className` within the VM"""
+
 class DexVm:
     def __init__(self, ao: AnalyzeObject):
         """Initialize a new VM capable of running Dalvik Code"""
+    def register_class(self, clazz: DynamicPythonClass):
+        """Register a class, which is part of the DEX-Runtime, meaning not part of the DEX-File"""
     def get_current_state(self) -> str:
         """Get a string representation of the current machine state."""
     def get_heap(self) -> str:
@@ -98,20 +135,24 @@ class DexVm:
         """Return a string representation of all instances"""
     def get_static_field(self, fqdn: str) -> VmResult:
         """Try get a static field already defined on the VM"""
-    
+
 class VmResult:
     def get_value(self) -> Any:
         """Cast the VmResult to a python native type"""
+
 class DexClassObject:
     pass
+
 class Dex:
     def get_name(self) -> str:
         """Get name of the Dexfile"""
     def get_identifier(self) -> str:
         """Get identifier of Dexfile"""
+
 class DexString:
     def content(self) -> str:
         """Return the content of this String"""
+
 class NativeSymbol:
     def symbol(self) -> str:
         """The name of the symbol as found in the dynamic_strtable"""
@@ -123,6 +164,7 @@ class NativeSymbol:
 
 class FieldAccess:
     """A helper class for field access"""
+
     def get_instruction(self) -> str:
         """Get the opcode of the instruction"""
     def get_field(self) -> DexField:
@@ -131,6 +173,7 @@ class FieldAccess:
         """Get the class where the field access came from"""
     def get_function(self) -> Method:
         """Get the method where the field access was found"""
+
 class DexField:
     def try_get_value(self, dex_vm: DexVm) -> VmResult:
         """Try evaluating the static dex context to find values set for this field. This only accurately works for static final fields, as they (should) are not accessed anymore."""
@@ -142,8 +185,9 @@ class DexField:
         """Return the class this field was defined on."""
     def get_field_access(self, ao: AnalyzeObject) -> list[FieldAccess]:
         """Get a list instructions accessing this field"""
-    dex_class : Class
+    dex_class: Class
     """The class this field is defined on."""
+
 class Evidence:
     def cross_references(self, ao: AnalyzeObject) -> list[Evidence]:
         """Find cross references to this object. Currently, this only works for dex objects."""
@@ -161,6 +205,7 @@ class Evidence:
         """Interpret this `Evidence` as a `Field`. Raises a `RuntimeException` if it cannot be cast."""
     def as_native_symbol(self) -> NativeSymbol:
         """Interpret this `Evidence` as a `NativeSymbol`. Raises a `RuntimeException` if it cannot be cast."""
+
 class Instruction:
     def get_arguments_as_value(self) -> list[Any]:
         """Return all arguments as python values, if they are constant"""
@@ -172,18 +217,20 @@ class Instruction:
         """Try executing the instruction with the VM. This can help evaluate possible `const` functions or simple static string encryptors"""
     def get_function_name(self) -> str:
         """Return the name of the executing function, or throw a `RuntimeException` if this instruction is not a function call"""
+
 class Graph:
     def to_dot(self) -> str:
         """Get dotfile of the graph"""
+
 class Method:
     def name(self) -> str:
-        """"Return the name of this function."""
+        """ "Return the name of this function."""
     def frida_hook(self) -> str:
         """Return a Frida-Hook for the current function"""
     def instruction_graph(self) -> str:
         """Return the instruction call graph"""
     def callgraph(self, ao: AnalyzeObject) -> Graph:
-        """Build a callgraph for the current method. We need the supergraph for the APK, 
+        """Build a callgraph for the current method. We need the supergraph for the APK,
         if it is not already built, we build it and cache it in the AnalyzeObject"""
     def signature(self) -> str:
         """Return the fully qualified domain name inclusive the signature. This should uniquely identify the function within the dex context."""
@@ -203,12 +250,16 @@ class Method:
         """Get a list of all argument types. This can be used as a helper function e.g. to build Frida scripts"""
     def get_return_type(self) -> str:
         """Get this methods return type"""
-    def find_all_branch_decisions(self, vm: DexVm, conservative: boolean) -> list[Branching]:
+    def find_all_branch_decisions(
+        self, vm: DexVm, conservative: boolean
+    ) -> list[Branching]:
         """Return a list of all branch decisions and their branch registers. Can be used to perform some dead branch analysis for example. Currently, this is still experimental."""
     @staticmethod
-    def find_all_branch_decisions_array(methods: list[Method], vm:DexVm, conservative: boolean) -> list[Branching]:
-        """"Same as `find_all_branch_decisions` but acting on an array of methods to use `rayon` for parallelization. Currently, this is non satisfactory as we have to clone the VM for each call (or lock the mutex)"""
-    
+    def find_all_branch_decisions_array(
+        methods: list[Method], vm: DexVm, conservative: boolean
+    ) -> list[Branching]:
+        """ "Same as `find_all_branch_decisions` but acting on an array of methods to use `rayon` for parallelization. Currently, this is non satisfactory as we have to clone the VM for each call (or lock the mutex)"""
+
 class Class:
     def name(self) -> str:
         """Returns the class name as used internally"""
@@ -275,8 +326,8 @@ class AnalyzeObject:
     # atest#
     def __init__(self, file_name: str, build_graph: bool, max_nesting: int):
         """Initialize a analysis session. Currently, build_graph does not do much.
-         `max_nesting` specifies how deep the recursion should go to look for libraries and 
-         resources.
+        `max_nesting` specifies how deep the recursion should go to look for libraries and
+        resources.
         """
     def get_runtime(self, method: Method) -> Runtime:
         """Get the runtime of dex files needed to run emulation."""
@@ -285,11 +336,11 @@ class AnalyzeObject:
     def find_methods(self, regex: str) -> list[Evidence]:
         """Look for methods matching the specified regex"""
     def find_fields(self, regex: str) -> list[Evidence]:
-         """Look for fields matching the specified regex"""
+        """Look for fields matching the specified regex"""
     def find_strings(self, regex: str) -> list[Evidence]:
-         """Look for strings matching the specified regex"""
+        """Look for strings matching the specified regex"""
     def find_classes(self, regex: str) -> list[Evidence]:
-         """Look for classes matching the specified regex"""
+        """Look for classes matching the specified regex"""
     def get_classes(self) -> list[Evidence]:
         """Return all classes"""
     def get_strings(self) -> list[Evidence]:
@@ -297,9 +348,9 @@ class AnalyzeObject:
     def get_methods(self) -> list[Evidence]:
         """Return all methods"""
     def get_fields(self) -> list[Evidence]:
-        """Return all fields"""        
+        """Return all fields"""
     def find_native_imports(self, file: str, pattern: str) -> list[Evidence]:
-         """Check the dynamic_string table of the elf binary to look for imported functions"""
+        """Check the dynamic_string table of the elf binary to look for imported functions"""
     def find_native_exports(self, file: str, pattern: str) -> list[Evidence]:
         """Check the dynamic_string table of the elf binary to look for exported functions (e.g. functions which are used from java)"""
     def find_native_strings(self, file: str, pattern: str) -> list[Evidence]:
@@ -310,14 +361,15 @@ class AnalyzeObject:
         """Get all found manifests."""
     def __getitem__(self, name) -> list[tuple[str, bytes]]:
         """Access the resource specified by `name`"""
-    def find_dynamically_registered_functions(self, regex: str, libName: str) -> list[Evidence]:
+    def find_dynamically_registered_functions(
+        self, regex: str, libName: str
+    ) -> list[Evidence]:
         """Find dynamically registered functions in `libName`, matching the name given by `regex`."""
     def get_file_names(self) -> list[str]:
-        """Get all file names"""    
+        """Get all file names"""
     def get_dex_names(self) -> list[str]:
         """Get all dex file names"""
     def get_primary_dex(self) -> list[Dex]:
         """Get the primary dex files"""
     def get_file(self, name) -> bytes:
         """Get file bytes"""
-    
