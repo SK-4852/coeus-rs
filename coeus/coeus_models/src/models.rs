@@ -874,6 +874,11 @@ impl Class {
         }
         None
     }
+    pub fn get_superclass(&self, dex_file: Arc<DexFile>) -> Option<Arc<Self>> {
+        let super_class_id = self.super_class;
+        let c = dex_file.get_class_by_type(super_class_id)?;
+        Some(c)
+    }
     pub fn get_disassembly(&self, md: &MultiDexFile) -> String {
         let file = md
             .dex_file_from_identifier(&self.dex_identifier)

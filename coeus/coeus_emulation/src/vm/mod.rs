@@ -414,6 +414,21 @@ impl VM {
             return Ok(method_data.clone());
         }
 
+        let Some(class) = self.dex_file.get_class_by_name(&class_name) else {
+            return Err(VMException::LinkerError);
+        };
+        
+        let mut super_class = class.get_superclass(self.dex_file.clone());
+        while let Some(c) = super_class.as_ref() {
+             if let Some(method_data) = iterator!(self.runtime)
+            .filter_map(|dex| dex.get_method_by_name_and_prototype(&c.class_name, method.method_name.as_str(), &method.proto_name).map(|d| (dex.clone(),d)))
+            .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
+            .first()
+            {
+                return Ok(method_data.clone());
+            }
+            super_class = c.get_superclass(self.dex_file.clone());
+        }
         Err(VMException::LinkerError)
     }
 
@@ -440,24 +455,41 @@ impl VM {
                     "Method Index: {}",
                     method_idx
                 )))?;
+       
         let proto_type =  dex_file.protos.get(method.proto_idx as usize).ok_or_else(|| VMException::MethodNotFound(format!(
                     "Method Index: {}, Proto Index: {}",
                     method_idx,
                     method.proto_idx
                 )))?.to_string(dex_file);
+      
         let class_name = dex_file
             .get_type_name(method.class_idx)
             .ok_or(VMException::ClassNotFound(method.class_idx))?;
-
+       
         if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &proto_type).map(|d| (dex.clone(),d)))
             .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
             .first()
         {
-            // self.method_link_table.insert(method_idx, **method_data);
             return Ok(method_data.clone());
         }
 
+        let Some((dex, class)) = iterator!(self.runtime).find_map_first(|d| d.get_class_by_name(class_name).map(|c| (d,c))) else {
+            return Err(VMException::LinkerError);
+        };
+        // try super class
+        let mut super_class = class.get_superclass(dex.clone());
+       
+        while let Some(c) = super_class.as_ref() {
+              if let Some(method_data) = iterator!(self.runtime)
+            .filter_map(|dex| dex.get_method_by_name_and_prototype(&c.class_name, method.method_name.as_str(), &proto_type).map(|d| (dex.clone(),d)))
+            .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
+            .first()
+            {
+                return Ok(method_data.clone());
+            }
+            super_class = c.get_superclass(dex_file.clone());
+        }
         Err(VMException::LinkerError)
     }
     fn get_class(&self, dex_file: Arc<DexFile>, type_idx: u32) -> Result<Arc<Class>, VMException> {
@@ -570,7 +602,7 @@ impl VM {
         //  self.current_state.current_method_index = method_idx;
         loop {
             steps += 1;
-            if steps > 1000 {
+            if steps > 10000 {
                 return Err(VMException::StackOverflow);
             }
             log::debug!("{:?}", self.current_state.current_stackframe);
@@ -723,10 +755,14 @@ impl VM {
                 &Instruction::RemIntLit16(dst, a, lit) => {
                     let dst: u8 = dst.into();
                     let a: u8 = a.into();
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_rem(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i16).wrapping_rem(b as i16) as i32
+                    })?;
                 }
                 &Instruction::RemIntLit8(dst, a, lit) => {
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_rem(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i8).wrapping_rem(b as i8) as i32
+                    })?;
                 }
                 &Instruction::AddInt(dst_a, b) => {
                     let dst_a: u8 = dst_a.into();
@@ -737,12 +773,16 @@ impl VM {
                     self.binary_op(dst, a, b, |a, b| Ok( a.wrapping_add(b)))?;
                 }
                 &Instruction::AddIntLit8(dst, a, lit) => {
-                    self.binary_op_lit(dst, a, lit, |a, b|  a.wrapping_add(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b|  {
+                        (a as i8).wrapping_add(b as i8) as i32
+                    })?;
                 }
                 &Instruction::AddIntLit16(dst, a, lit) => {
                     let dst: u16 = dst.into();
                     let a: u16 = a.into();
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_add(b) )?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i16).wrapping_add(b as i16) as i32 
+                    } )?;
                 }
                 Instruction::AddLong(_, _) => {
                     return Err(VMException::LinkerError);
@@ -760,12 +800,16 @@ impl VM {
                     self.binary_op(dst, a, b, |a, b| Ok(a.wrapping_mul(b)))?;
                 }
                 &Instruction::MulIntLit8(dst, a, lit) => {
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_mul(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i8).wrapping_mul(b as i8) as i32
+                    })?;
                 }
                 &Instruction::MulIntLit16(dst, a, lit) => {
                     let dst: u16 = dst.into();
                     let a: u16 = a.into();
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_mul(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i16).wrapping_mul(b as i16) as i32
+                    })?;
                 }
                 Instruction::MulLong(_, _) => {
                     return Err(VMException::LinkerError);
@@ -782,12 +826,16 @@ impl VM {
                     self.binary_op(dst, a, b, |a, b| Ok(a.wrapping_div(b)))?;
                 }
                 &Instruction::DivIntLit8(dst, a, lit) => {
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_div(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i8).wrapping_div(b as i8) as i32
+                    })?;
                 }
                 &Instruction::DivIntLit16(dst, a, lit) => {
                     let dst: u16 = dst.into();
                     let a: u16 = a.into();
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_div(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i16).wrapping_div(b as i16) as i32
+                    })?;
                 }
                 Instruction::DivLong(_, _) => {
                     return Err(VMException::LinkerError);
@@ -805,12 +853,16 @@ impl VM {
                     self.binary_op(dst, a, b, |a, b| Ok(a.wrapping_sub(b)))?;
                 }
                 &Instruction::SubIntLit8(dst, a, lit) => {
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_sub(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i8).wrapping_sub(b as i8) as i32
+                    })?;
                 }
                 &Instruction::SubIntLit16(dst, a, lit) => {
                     let dst: u16 = dst.into();
                     let a: u16 = a.into();
-                    self.binary_op_lit(dst, a, lit, |a, b| a.wrapping_sub(b))?;
+                    self.binary_op_lit(dst, a, lit, |a, b| {
+                        (a as i16).wrapping_sub(b as i16) as i32
+                    })?;
                 }
                 Instruction::SubLong(_, _) => {
                     return Err(VMException::LinkerError);
@@ -1335,7 +1387,7 @@ impl VM {
                 Instruction::InvokeSuper(_, _, _) => {}
                 Instruction::InvokeVirtual(_, method_ref, argument_registers)
                 | Instruction::InvokeDirect(_, method_ref, argument_registers) => {
-                    if self.stack_frames.len() > 20 {
+                    if self.stack_frames.len() > 50 {
                         return Err(VMException::StackOverflow);
                     }
 
@@ -1469,7 +1521,7 @@ impl VM {
                 }
                 Instruction::InvokeStatic(arg_count, method_ref, argument_registers) => {
                    
-                    if self.stack_frames.len() > 20 {
+                    if self.stack_frames.len() > 50 {
                         return Err(VMException::StackOverflow);
                     }
                     
