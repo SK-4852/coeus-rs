@@ -172,6 +172,7 @@ pub struct VM {
     runtime: Vec<Arc<DexFile>>,
     resources: Arc<HashMap<String, Arc<BinaryObject>>>,
     builtins: Arc<HashMap<String, Arc<Class>>>,
+    cached_methods: HashMap<String,(Arc<DexFile>, Arc<MethodData>)>,
     rng: Arc<Mutex<RefCell<StdRng>>>,
     break_points: Vec<Breakpoint>,
     stop_on_array_use: bool,
@@ -259,6 +260,7 @@ impl VM {
 
                 last_break_point_reg: 0,
             },
+            cached_methods: HashMap::new(),
             stack_frames: vec![],
             heap: HashMap::new(),
             instances: HashMap::new(),
@@ -402,13 +404,13 @@ impl VM {
     }
 
     /// Returned MethodData is guaranteed to have an implementation
-    pub fn lookup_method(&self, class_name: &str, method: &Method) -> Result<(Arc<DexFile>, &MethodData), VMException> {
+    pub fn lookup_method(&self, class_name: &str, method: &Method) -> Result<(Arc<DexFile>, Arc<MethodData>), VMException> {
         if let Some(method_data) = self.dex_file.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &method.proto_name).map(|d|(self.dex_file.clone(),d)) {
             return Ok(method_data);
         }
          if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &method.proto_name).map(|d| (dex.clone(),d)))
-            .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
+            .collect::<Vec<(Arc<DexFile>,Arc<MethodData>)>>()
             .first()
         {
             return Ok(method_data.clone());
@@ -422,7 +424,7 @@ impl VM {
         while let Some(c) = super_class.as_ref() {
              if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(&c.class_name, method.method_name.as_str(), &method.proto_name).map(|d| (dex.clone(),d)))
-            .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
+            .collect::<Vec<(Arc<DexFile>,Arc<MethodData>)>>()
             .first()
             {
                 return Ok(method_data.clone());
@@ -434,14 +436,10 @@ impl VM {
 
 
     fn get_method<'a>(
-        &'a self,
+        &'a mut self,
         dex_file: &'a Arc<DexFile>,
         method_idx: u32,
-    ) -> Result<(Arc<DexFile>, &MethodData), VMException> {
-        // if let Some(method) = self.method_link_table.get(&method_idx) {
-        //     return Ok(method);
-        // }
-        //first search current dexfile
+    ) -> Result<(Arc<DexFile>, Arc<MethodData>), VMException> {
 
         if let Some(method_data) = dex_file.get_method_by_idx(method_idx) {
             // self.method_link_table.insert(method_idx, *method_data);
@@ -465,12 +463,18 @@ impl VM {
         let class_name = dex_file
             .get_type_name(method.class_idx)
             .ok_or(VMException::ClassNotFound(method.class_idx))?;
-       
+        
+        let method_cache_key = format!("{}->{}{}", class_name, method.method_name, proto_type);
+        if let Some(md) = self.cached_methods.get(&method_cache_key) {
+            return Ok((md.0.clone(), md.1.clone()));
+        }
+
         if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(class_name, method.method_name.as_str(), &proto_type).map(|d| (dex.clone(),d)))
-            .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
+            .collect::<Vec<(Arc<DexFile>,Arc<MethodData>)>>()
             .first()
         {
+            self.cached_methods.insert(method_cache_key, (method_data.0.clone(), method_data.1.clone()));
             return Ok(method_data.clone());
         }
 
@@ -483,9 +487,10 @@ impl VM {
         while let Some(c) = super_class.as_ref() {
               if let Some(method_data) = iterator!(self.runtime)
             .filter_map(|dex| dex.get_method_by_name_and_prototype(&c.class_name, method.method_name.as_str(), &proto_type).map(|d| (dex.clone(),d)))
-            .collect::<Vec<(Arc<DexFile>,&MethodData)>>()
+            .collect::<Vec<(Arc<DexFile>,Arc<MethodData>)>>()
             .first()
             {
+                self.cached_methods.insert(method_cache_key, (method_data.0.clone(), method_data.1.clone()));
                 return Ok(method_data.clone());
             }
             super_class = c.get_superclass(dex_file.clone());

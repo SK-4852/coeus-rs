@@ -454,7 +454,7 @@ impl InstructionValue {
 /// This represents a method, which can also be executed.
 pub struct Method {
     pub(crate) method: Arc<models::Method>,
-    pub(crate) method_data: Option<models::MethodData>,
+    pub(crate) method_data: Option<Arc<models::MethodData>>,
     pub(crate) file: Arc<DexFile>,
     pub(crate) class: Arc<models::Class>,
 }
@@ -601,7 +601,7 @@ impl FieldAccess {
     pub fn get_function(&self) -> PyResult<Method> {
         if let analysis::Location::DexMethod(method_idx, f) = &self.place {
             let class = self.get_class()?;
-            let method_data = f.get_method_by_idx(*method_idx).cloned();
+            let method_data = f.get_method_by_idx(*method_idx);
             let method = if let Some(method) = f
                 .methods
                 .iter()
@@ -949,7 +949,7 @@ impl DexField {
                     .start(
                         method_data.method_idx,
                         &method.file.identifier,
-                        &method_data.code.unwrap(),
+                        method_data.code.as_ref().unwrap(),
                         vec![],
                     )
                     .is_err()

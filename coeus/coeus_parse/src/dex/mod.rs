@@ -441,14 +441,14 @@ pub fn parse_dex_buf(
             //only try to parse of code if it is in the data section
             let new_m = methods[method.method_idx as usize].clone();
             if (method.code_off as u32) < config.data_off {
-                the_class.codes.push(MethodData {
+                the_class.codes.push(Arc::new(MethodData {
                     method_idx: new_m.method_idx as u32,
                     name: new_m.method_name.clone(),
                     method: new_m,
                     access_flags: method.access_flags,
                     code: None,
                     call_graph: None,
-                });
+                }));
                 continue;
             }
             let mut class_method_cursor = buffer.get_cursor();
@@ -457,7 +457,7 @@ pub fn parse_dex_buf(
                 .unwrap();
             let code = CodeItem::from_bytes(&mut class_method_cursor);
 
-            the_class.codes.push(MethodData {
+            the_class.codes.push(Arc::new(MethodData {
                 method_idx: new_m.method_idx as u32,
                 access_flags: method.access_flags,
                 name: new_m.method_name.clone(),
@@ -468,20 +468,20 @@ pub fn parse_dex_buf(
                     None
                 },
                 code: Some(code),
-            });
+            }));
         }
         for method in &the_class.class_data.as_ref().unwrap().direct_methods {
             //only try to parse of code if it is in the data section
             let new_m = methods[method.method_idx as usize].clone();
             if (method.code_off as u32) < config.data_off {
-                the_class.codes.push(MethodData {
+                the_class.codes.push(Arc::new(MethodData {
                     method_idx: new_m.method_idx as u32,
                     access_flags: method.access_flags,
                     name: new_m.method_name.clone(),
                     method: new_m,
                     code: None,
                     call_graph: None,
-                });
+                }));
                 continue;
             }
             let mut class_method_cursor = buffer.get_cursor();
@@ -490,7 +490,7 @@ pub fn parse_dex_buf(
                 .unwrap();
             let code = CodeItem::from_bytes(&mut class_method_cursor);
 
-            the_class.codes.push(MethodData {
+            the_class.codes.push(Arc::new(MethodData {
                 method_idx: new_m.method_idx as u32,
                 access_flags: method.access_flags,
                 name: new_m.method_name.clone(),
@@ -501,7 +501,7 @@ pub fn parse_dex_buf(
                     None
                 },
                 code: Some(code),
-            });
+            }));
         }
         let the_class = Arc::new(the_class);
 

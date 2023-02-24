@@ -151,7 +151,7 @@ impl DexFile {
             .collect()
     }
 
-    pub fn get_method_by_idx<T>(&self, method_idx: T) -> Option<&MethodData>
+    pub fn get_method_by_idx<T>(&self, method_idx: T) -> Option<Arc<MethodData>>
     where
         T: Into<u32> + Copy + Sync,
     {
@@ -164,7 +164,7 @@ impl DexFile {
             class
                 .codes
                 .par_iter()
-                .find_first(|c| c.method_idx == method_idx.into())
+                .find_first(|c| c.method_idx == method_idx.into()).cloned()
         } else {
             None
         }
@@ -190,7 +190,7 @@ impl DexFile {
         class_name: &str,
         method_name: &str,
         proto_type: &str,
-    ) -> Option<&MethodData> {
+    ) -> Option<Arc<MethodData>> {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(class) = self
             .classes
@@ -201,7 +201,7 @@ impl DexFile {
                 code.name == method_name
                     && code.code.is_some()
                     && proto_type == self.protos[code.method.proto_idx as usize].to_string(self)
-            })
+            }).cloned()
         } else {
             None
         }

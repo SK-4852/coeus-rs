@@ -141,6 +141,7 @@ impl FunctionTransformation {
         let method_data = method_data.clone();
         let code_item = method_data
             .code
+            .as_ref()
             .ok_or(VMException::MethodNotFound(self.method.method_name.clone()))?;
         let mut arguments = vec![];
         for arg in &self.input_register {

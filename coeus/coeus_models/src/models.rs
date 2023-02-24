@@ -815,7 +815,7 @@ pub struct Class {
     #[serde(skip_serializing)]
     pub class_data: Option<ClassData>,
     // #[serde(skip_serializing)]
-    pub codes: Vec<MethodData>,
+    pub codes: Vec<Arc<MethodData>>,
     #[serde(skip_serializing)]
     pub static_fields: Vec<EncodedItem>,
 }
