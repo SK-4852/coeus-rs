@@ -29,4 +29,4 @@ coeus_parse = {path = "./coeus_parse", optional = true}
 coeus_debug = {path = "./coeus_debug", optional = true}
 
 [build-dependencies]
-built = "0.5.1"
+built = "0.6"
