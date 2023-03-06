@@ -229,7 +229,7 @@ class Method:
         """Return a Frida-Hook for the current function"""
     def instruction_graph(self) -> str:
         """Return the instruction call graph"""
-    def callgraph(self, ao: AnalyzeObject) -> Graph:
+    def callgraph(self, ignore_methods: list[str], ao: AnalyzeObject) -> Graph:
         """Build a callgraph for the current method. We need the supergraph for the APK,
         if it is not already built, we build it and cache it in the AnalyzeObject"""
     def signature(self) -> str:
@@ -329,6 +329,8 @@ class AnalyzeObject:
         `max_nesting` specifies how deep the recursion should go to look for libraries and
         resources.
         """
+    def build_supergraph(self, excluded_classes: list[str]):
+        """Build supergraph with additional excluded classes"""
     def get_runtime(self, method: Method) -> Runtime:
         """Get the runtime of dex files needed to run emulation."""
     def get_native_methods(self) -> list[Method]:

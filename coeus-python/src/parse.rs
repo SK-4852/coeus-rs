@@ -86,18 +86,24 @@ const NON_INTERESTING_CLASSES: [&str; 16] = [
     "Lorg/bouncycastle/",
 ];
 impl AnalyzeObject {
-    pub fn build_main_supergraph(&mut self) -> Result<Arc<Supergraph>, String> {
-        self.build_supergraph_for_multi_dex(0)
+    pub fn build_main_supergraph(
+        &mut self,
+        excluded_classes: &[String],
+    ) -> Result<Arc<Supergraph>, String> {
+        self.build_supergraph_for_multi_dex(0, excluded_classes)
     }
     pub fn build_supergraph_for_multi_dex(
         &mut self,
         index: usize,
+        excluded_classes: &[String],
     ) -> Result<Arc<Supergraph>, String> {
         let c = Arc::new(self.files.binaries.clone());
         if index >= self.files.multi_dex.len() {
             return Err("Index out of bounds".to_string());
         }
-        let Ok(supergraph) = build_information_graph(&self.files.multi_dex[0], c, &NON_INTERESTING_CLASSES, None, None) else {
+        let mut new = NON_INTERESTING_CLASSES.to_vec();
+        new.extend(excluded_classes.iter().map(|s| s.as_str()));
+        let Ok(supergraph) = build_information_graph(&self.files.multi_dex[0], c, &new, None, None) else {
             return Err("Failed to build the graph".to_string());
         };
         let supergraph = Arc::new(supergraph);
@@ -115,8 +121,13 @@ impl AnalyzeObject {
                 files,
                 supergraph: None,
             }),
-            Err(e) => Err(PyIOError::new_err(format!("{:?}", e))),
+            Err(e) => Err(PyIOError::new_err(format!("{e:?}"))),
         }
+    }
+    pub fn build_supergraph(&mut self, ignore_classes: Vec<String>) -> PyResult<()> {
+        self.build_main_supergraph(&ignore_classes)
+            .map_err(PyRuntimeError::new_err)?;
+        Ok(())
     }
 
     pub fn get_runtime(&self, file: &Method) -> PyResult<Runtime> {

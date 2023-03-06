@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -7,11 +7,13 @@
 use std::collections::HashMap;
 
 use coeus_models::models::Class;
-use petgraph::{Graph, graph::{NodeIndex, DiGraph}, visit::{NodeFiltered, Reversed, Bfs, IntoNeighborsDirected}};
+use petgraph::{
+    graph::{DiGraph, NodeIndex},
+    visit::{Bfs, IntoNeighborsDirected, NodeFiltered, Reversed},
+    Graph,
+};
 
 use super::{InfoNode, Subgraph};
-
-
 
 /**
 Try to get a sound callgraph for a class. This method tries to find all parent nodes, which possibly could connect, as well as child nodes. It does this with static analysis,
@@ -83,7 +85,11 @@ pub fn callgraph(graph: &Graph<InfoNode, i32>, class: &Class, start: NodeIndex<u
 
 //TODO: fix code duplication
 /// Try to get the callgraph for a method. The function tries to find all possible parents as well as all possible childs.
-pub fn callgraph_for_method(graph: &Graph<InfoNode, i32>, start: NodeIndex<u32>) -> Subgraph {
+pub fn callgraph_for_method(
+    graph: &Graph<InfoNode, i32>,
+    start: NodeIndex<u32>,
+    ignore_methods: &[String],
+) -> Subgraph {
     let filtered_graph = NodeFiltered::from_fn(graph, |node| {
         graph
             .node_weight(node)
@@ -93,7 +99,8 @@ pub fn callgraph_for_method(graph: &Graph<InfoNode, i32>, start: NodeIndex<u32>)
                     InfoNode::MethodNode(..)
                         | InfoNode::ArrayNode(..)
                         | InfoNode::DynamicArgumentNode(..) // | InfoNode::DynamicReturnNode(..)
-                )
+                        | InfoNode::StaticArgumentNode(..)
+                ) && (!matches!(m, InfoNode::MethodNode(method, _) if ignore_methods.contains(&method.method_name) || ignore_methods.is_empty()) )
             })
             .unwrap_or(false)
     });
@@ -103,8 +110,8 @@ pub fn callgraph_for_method(graph: &Graph<InfoNode, i32>, start: NodeIndex<u32>)
             .map(|m| {
                 matches!(
                     m,
-                    InfoNode::MethodNode(..) | InfoNode::DynamicReturnNode(..)
-                )
+                    InfoNode::MethodNode(..) | InfoNode::DynamicReturnNode(..) | InfoNode::StringNode(..) 
+                ) && (!matches!(m, InfoNode::MethodNode(method, _) if ignore_methods.contains(&method.method_name) || ignore_methods.is_empty()))
             })
             .unwrap_or(false)
     });
@@ -119,7 +126,8 @@ pub fn callgraph_for_method(graph: &Graph<InfoNode, i32>, start: NodeIndex<u32>)
                         | InfoNode::ArrayNode(..)
                         | InfoNode::DynamicArgumentNode(..)
                         | InfoNode::DynamicReturnNode(..)
-                )
+                        | InfoNode::StaticArgumentNode(..)
+                ) && (!matches!(m, InfoNode::MethodNode(method, _) if ignore_methods.contains(&method.method_name) || ignore_methods.is_empty()))
             })
             .unwrap_or(false)
     });

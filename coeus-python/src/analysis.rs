@@ -1058,14 +1058,14 @@ const {function_name} = {class_without_pkg}.{function_name}.overload({arguments}
         self.signature()
     }
 
-    pub fn callgraph(&self, ao: &mut AnalyzeObject) -> PyResult<Graph> {
+    pub fn callgraph(&self, ignore_methods: Vec<String>, ao: &mut AnalyzeObject) -> PyResult<Graph> {
         if ao.files.multi_dex[0].dex_file_from_identifier(&self.file.identifier).is_none() {
              return Err(PyRuntimeError::new_err("Supergraph only supported on the main APK")); 
         }
         let supergraph = if let Some(sg) = ao.supergraph.as_ref() {
             sg.clone()
         } else {
-            let Ok(s) = ao.build_main_supergraph() else {
+            let Ok(s) = ao.build_main_supergraph(&[]) else {
                 return Err(PyRuntimeError::new_err("Could not build supergraph"));
             };
             s
@@ -1080,7 +1080,7 @@ const {function_name} = {class_without_pkg}.{function_name}.overload({arguments}
                 .find(|k| k.contains(&fqdn))
             {
                 let node_index = supergraph.class_node_mapping[method_key];
-                let g = callgraph_for_method(&supergraph.super_graph, node_index);
+                let g = callgraph_for_method(&supergraph.super_graph, node_index, &ignore_methods);
                 Ok(Graph {
                     supergraph,
                     subgraph: Some(g)
