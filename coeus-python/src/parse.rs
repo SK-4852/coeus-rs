@@ -158,6 +158,12 @@ impl AnalyzeObject {
             .collect()
     }
 
+    pub fn get_resource_string(&self, id: u32) -> (String, Vec<(String, String)>) {
+        self.files
+            .get_string_from_resource(id)
+            .unwrap_or(("".to_string(), vec![]))
+    }
+
     pub fn get_file(&self, py: Python, name: &str) -> PyObject {
         let mut _file_content: String;
         let bin_object = self.files.binaries.get(name).unwrap();

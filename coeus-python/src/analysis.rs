@@ -19,12 +19,12 @@ use coeus::{
     },
     coeus_emulation::vm::{runtime::StringClass, Register, Value, VM},
     coeus_models::models::{
-        self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction,
+        self, AccessFlags, BinaryObject, DexFile, InstructionOffset, TestFunction, EncodedItem,
     }, coeus_parse::dex::graph::{Supergraph, callgraph::callgraph_for_method, Subgraph},
 };
 use pyo3::{
     exceptions::PyRuntimeError,
-    types::{PyDict, PyTuple},
+    types::{PyDict, PyTuple, PyString},
 };
 use pyo3::{prelude::*, types::PyList};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -35,6 +35,70 @@ use crate::{
     vm::{DexVm, VmResult},
 };
 
+#[derive(Clone)]
+pub enum FieldValue {
+    String(String),
+    Short(u16),
+    Int(u32),
+    Long(u64),
+    Float(f32),
+    Double(f64),
+    Byte(u8),
+    Char(char),
+    Boolean(bool),
+    Null
+}
+use std::convert::TryFrom;
+impl From<EncodedItem> for FieldValue {
+    fn from(value: EncodedItem) -> Self {
+        match value.value_type {
+            models::ValueType::Byte => {
+                if let Ok(b) = u8::try_from(value) {
+                    FieldValue::Byte(b)
+                } else {
+                    FieldValue::Null
+                }
+            },
+            models::ValueType::Short => {
+                if let Ok(b) = u16::try_from(value) {
+                    FieldValue::Short(b)
+                } else {
+                    FieldValue::Null
+                }
+            },
+            models::ValueType::Char => {
+                if let Ok(b) = char::try_from(value) {
+                    FieldValue::Char(b)
+                } else {
+                    FieldValue::Null
+                }
+            },
+            models::ValueType::Int => {
+                if let Ok(b) = u32::try_from(value) {
+                    FieldValue::Int(b)
+                } else {
+                    FieldValue::Null
+                }
+            },
+            models::ValueType::Long => {
+                if let Ok(b) = u64::try_from(value) {
+                    FieldValue::Long(b)
+                } else {
+                    FieldValue::Null
+                }
+            },
+             models::ValueType::Boolean => {
+                if let Ok(b) = bool::try_from(value) {
+                    FieldValue::Boolean(b)
+                } else {
+                    FieldValue::Null
+                }
+            },
+            _ => FieldValue::Null
+           
+        }
+    }
+}
 #[pyclass]
 pub struct Graph {
     supergraph: Arc<Supergraph>,
@@ -634,6 +698,7 @@ pub struct DexField {
     pub(crate) field_name: Option<String>,
     pub(crate) file: Arc<DexFile>,
     pub(crate) dex_class: Class,
+    pub(crate) value: Option<FieldValue>
 }
 
 #[pyclass]
@@ -856,6 +921,7 @@ impl Evidence {
                     class,
                     file: file.clone(),
                 },
+                value: None
             };
             Ok(FieldAccess {
                 field: dex_field,
@@ -889,25 +955,37 @@ impl Evidence {
                 Arc::new(default_class)
             };
             let mut access_flags = None;
-            if let Some(class_data) = &class.class_data {
-                for i_f in &class_data.instance_fields {
-                    if let Some(instance_field) = file.fields.get(i_f.field_idx as usize) {
-                        if instance_field == field {
-                            access_flags = Some(i_f.access_flags);
-                            break;
+            let mut idx = None;
+            'found_class: {
+                if let Some(class_data) = &class.class_data {
+                    for (index, i_f) in class_data.instance_fields.iter().enumerate() {
+                        if let Some(instance_field) = file.fields.get(i_f.field_idx as usize) {
+                            if instance_field == field {
+                                idx = Some(index);
+                                access_flags = Some(i_f.access_flags);
+                                break 'found_class;
+                            }
                         }
                     }
-                }
-                for s_f in &class_data.static_fields {
-                    if let Some(static_field) = file.fields.get(s_f.field_idx as usize) {
-                        if static_field == field {
-                            access_flags = Some(s_f.access_flags);
-                            break;
+                    for (index, s_f) in class_data.static_fields.iter().enumerate() {
+                        if let Some(static_field) = file.fields.get(s_f.field_idx as usize) {
+                            if static_field == field {
+                                idx = Some(index);
+                                access_flags = Some(s_f.access_flags);
+                                break 'found_class;
+                            }
                         }
                     }
                 }
             }
-
+            let value = if let Some(idx) = idx {
+                class.static_fields.get(idx).map(|value| {
+                    FieldValue::from(value.clone())
+                })
+            } else {
+                None
+            };
+            
             Ok(DexField {
                 field: field.clone(),
                 access_flags,
@@ -921,6 +999,7 @@ impl Evidence {
                     class,
                     file: file.clone(),
                 },
+                value
             })
         } else {
             Err(PyRuntimeError::new_err("not a field"))
@@ -965,6 +1044,24 @@ impl DexField {
         } else {
             Err(PyRuntimeError::new_err("No clinit found"))
         }
+    }
+    pub fn get_static_data(& self, py: Python) -> PyResult<Py<PyAny>> {
+        let Some(value) = self.value.as_ref() else {
+            return Err(PyRuntimeError::new_err("No static data, try emulating clinit"));
+        };
+        let p : Py<PyAny> = match value {
+                FieldValue::String(s) => s.into_py(py),
+                FieldValue::Short(short) => short.into_py(py),
+                FieldValue::Int(int) => int.into_py(py),
+                FieldValue::Long(long) => long.into_py(py),
+                FieldValue::Float(float) => float.into_py(py),
+                FieldValue::Double(double) => double.into_py(py),
+                FieldValue::Byte(b) => b.into_py(py),
+                FieldValue::Char(c) => c.into_py(py),
+                FieldValue::Boolean(bool) => bool.into_py(py),
+                FieldValue::Null => None::<bool>.into_py(py),
+        };
+        Ok(p)
     }
     pub fn field_name(&self) -> String {
         self.field_name.clone().unwrap_or_else(|| String::from(""))
@@ -1577,8 +1674,30 @@ impl Class {
                 field_name: Some(self.file.fields[a.field_idx as usize].name.clone()),
                 file: self.file.clone(),
                 dex_class: self.clone(),
+                value: None
             })
             .ok_or_else(|| PyRuntimeError::new_err("field not found"))
+    }
+    pub fn get_static_fields(&self) -> PyResult<Vec<DexField>> {
+        let class_data = if let Some(c_d) = self.class.class_data.as_ref() {
+            c_d
+        } else {
+            return Err(PyRuntimeError::new_err("field not found"));
+        };
+          Ok(class_data
+            .static_fields
+            .iter()
+            .enumerate()
+            .map(|(idx, a)| DexField {
+                field: self.file.fields[a.field_idx as usize].clone(),
+                access_flags: Some(a.access_flags),
+                field_name: Some(self.file.fields[a.field_idx as usize].name.clone()),
+                file: self.file.clone(),
+                dex_class: self.clone(),
+                value: self.class.static_fields.get(idx).map(|value| {
+                    FieldValue::from(value.clone())
+                })
+            }).collect::<Vec<_>>())
     }
     pub fn get_static_field(&self, name: &str) -> PyResult<DexField> {
         let class_data = if let Some(c_d) = self.class.class_data.as_ref() {
@@ -1589,16 +1708,21 @@ impl Class {
         class_data
             .static_fields
             .iter()
-            .find(|a| {
+            .enumerate()
+            .find(|(_, a)| {
                 let f = &self.file.fields[a.field_idx as usize];
                 f.name == name
             })
-            .map(|a| DexField {
+            
+            .map(|(idx, a)| DexField {
                 field: self.file.fields[a.field_idx as usize].clone(),
                 access_flags: Some(a.access_flags),
                 field_name: Some(self.file.fields[a.field_idx as usize].name.clone()),
                 file: self.file.clone(),
                 dex_class: self.clone(),
+                value: self.class.static_fields.get(idx).map(|value| {
+                    FieldValue::from(value.clone())
+                })
             })
             .ok_or_else(|| PyRuntimeError::new_err("field not found"))
     }

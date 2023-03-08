@@ -57,4 +57,40 @@ impl Files {
         let _ = Executor::xml(Cursor::new(&binary_xml), &mut visitor);
         visitor.into_string().ok()
     }
+    pub fn get_string_from_resource(&self, id: u32) -> Option<(String, Vec<(String, String)>)> {
+        let arsc = arsc::parse_from(Cursor::new(&self.binary_resource_file)).ok()?;
+        let Some(pkg) = arsc.packages.iter().find(|p| p.id == ((id & 0xff_00_00_00) >> 24)) else {
+            return None
+        };
+        let Some(ty) = pkg.types.iter().find(|ty| ty.id == ((id & 0x00_ff_00_00) >> 16) as usize) else {
+            return None;
+        };
+        let mut localized_strings = vec![];
+        let mut entry_name = String::default();
+        for resource in &ty.configs {
+            if let Some(entry) = resource.resources.resources.get((id as usize) & 0xff_ff) {
+                let locale = if &resource.id[8..10] == [0, 0] {
+                    "default".to_string()
+                } else if let Ok(locale) = std::str::from_utf8(&resource.id[8..10]) {
+                    locale.to_string()
+                } else {
+                    "default".to_string()
+                };
+                if let Some(name) = pkg.key_names.strings.get(entry.name_index) {
+                    entry_name = name.to_string();
+                }
+                match &entry.value {
+                    arsc::ResourceValue::Plain(a) => {
+                        if a.is_string() {
+                            if let Some(val) = arsc.global_string_pool.strings.get(a.data_index) {
+                                localized_strings.push((locale.to_string(), val.to_string()));
+                            }
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+        }
+        Some((entry_name, localized_strings))
+    }
 }

@@ -889,7 +889,7 @@ impl Class {
         } else if let Some((file, class)) = md
             .classes()
             .iter()
-            .find(|(_, class)| class.class_name == class_name && !class.codes.is_empty())
+            .find(|(_, class)| class.class_name == class_name )
         {
             (file.clone(), class.clone())
         } else {

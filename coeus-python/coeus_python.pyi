@@ -177,6 +177,8 @@ class FieldAccess:
 class DexField:
     def try_get_value(self, dex_vm: DexVm) -> VmResult:
         """Try evaluating the static dex context to find values set for this field. This only accurately works for static final fields, as they (should) are not accessed anymore."""
+    def get_static_data(self) -> Any:
+        """Static primitive types don't need emulation"""
     def field_name(self) -> str:
         """Return the name of this field"""
     def fqdn(self) -> str:
@@ -273,6 +275,12 @@ class Class:
         """Get a method of this class by name"""
     def __getitem__(self, name: str) -> Method:
         """Get a method of this class by name"""
+    def get_field(self, name: str) -> DexField:
+        """Return an instance field"""
+    def get_static_field(self, name: str) -> DexField:
+        """Return the static field"""
+    def get_static_fields(self) -> list[DexField]:
+        """Get all static fields on this class"""
     def friendly_name(self) -> str:
         """Get a `friendly` name for this class."""
     def find_subclasses(self, ao: AnalyzeObject) -> list[Class]:
@@ -361,7 +369,7 @@ class AnalyzeObject:
         """Try matching the regex for any type of object in the Dex context"""
     def get_manifests(self) -> list[Manifest]:
         """Get all found manifests."""
-    def __getitem__(self, name) -> list[tuple[str, bytes]]:
+    def __getitem__(self, name: str) -> list[tuple[str, bytes]]:
         """Access the resource specified by `name`"""
     def find_dynamically_registered_functions(
         self, regex: str, libName: str
@@ -373,5 +381,7 @@ class AnalyzeObject:
         """Get all dex file names"""
     def get_primary_dex(self) -> list[Dex]:
         """Get the primary dex files"""
-    def get_file(self, name) -> bytes:
+    def get_file(self, name: str) -> bytes:
         """Get file bytes"""
+    def get_resource_string(self, id: int) -> str:
+        """Lookup the string table"""
