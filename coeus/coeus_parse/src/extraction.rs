@@ -106,7 +106,8 @@ pub fn extract_single_threaded(
     Files {
         multi_dex,
         binaries: other_files,
-        binary_resource_file: bin_res_file
+        binary_resource_file: bin_res_file,
+        arsc: None
     }
 }
 
@@ -131,7 +132,8 @@ pub fn extract_zip(
         return Files {
             multi_dex,
             binaries: other_files,
-            binary_resource_file: vec![]
+            binary_resource_file: vec![],
+            arsc: None
         };
     };
 
@@ -220,7 +222,8 @@ pub fn extract_zip(
     Files {
         multi_dex,
         binaries: other_files,
-        binary_resource_file: bin_res_file
+        binary_resource_file: bin_res_file,
+        arsc: None
     }
 }
 

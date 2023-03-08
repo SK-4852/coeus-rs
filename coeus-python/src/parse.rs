@@ -15,6 +15,7 @@ use pyo3::exceptions::{PyIOError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use regex::Regex;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::analysis::Method;
@@ -158,10 +159,11 @@ impl AnalyzeObject {
             .collect()
     }
 
-    pub fn get_resource_string(&self, id: u32) -> (String, Vec<(String, String)>) {
-        self.files
-            .get_string_from_resource(id)
-            .unwrap_or(("".to_string(), vec![]))
+    pub fn get_resource_string(&mut self, id: u32) -> Option<(String, HashMap<String, String>)> {
+        if self.files.arsc.is_none() {
+            let _ = self.files.load_arsc();
+        }
+        self.files.get_string_from_resource(id)
     }
 
     pub fn get_file(&self, py: Python, name: &str) -> PyObject {
@@ -171,10 +173,10 @@ impl AnalyzeObject {
         if name.ends_with(".xml") {
             let xml = self.files.decode_resource(bin_object.data()).unwrap();
             let result = xml.as_bytes();
-            PyBytes::new(py, &result).into()
+            PyBytes::new(py, result).into()
         } else {
             let result = bin_object.data();
-            PyBytes::new(py, &result).into()
+            PyBytes::new(py, result).into()
         }
     }
 
@@ -228,7 +230,7 @@ impl AnalyzeObject {
             .iter()
             .map(|a| Dex {
                 _file: a.primary.clone(),
-                dex_name: a.primary.get_dex_name().to_string().clone(),
+                dex_name: a.primary.get_dex_name().to_string(),
                 identifier: a.primary.identifier.clone(),
             })
             .collect()
