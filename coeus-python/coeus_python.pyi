@@ -247,7 +247,9 @@ class Method:
     def cross_references(self, ao: AnalyzeObject) -> list[Evidence]:
         """Find all methods, referencing this method."""
     def find_method_call(self, signature: str) -> list[Instruction]:
-        """Statically analyse this function to look for a specifica method call. It performs basic register flow analysis and returns the possible arguments for the specified method."""
+        """Statically analyse this function to look for a specific method call. It performs basic register flow analysis and returns the possible arguments for the specified method."""
+    def find_static_field_read(self, name: str) -> list[DexField]:
+        """Find (static) field access within a method"""
     def get_argument_types_string(self) -> list[str]:
         """Get a list of all argument types. This can be used as a helper function e.g. to build Frida scripts"""
     def get_return_type(self) -> str:

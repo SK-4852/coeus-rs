@@ -12,7 +12,7 @@ use std::{
 };
 
 use coeus_models::models::{
-    Class, CodeItem, DexFile, Instruction, InstructionOffset, InstructionSize, Method,
+    Class, CodeItem, DexFile, Field, Instruction, InstructionOffset, InstructionSize, Method,
 };
 use coeus_parse::coeus_emulation::vm::{
     runtime::StringClass, ClassInstance, Register, VMException, VM,
@@ -76,6 +76,14 @@ impl Default for State {
 }
 
 #[derive(Clone)]
+pub enum InstructionType {
+    FunctionCall,
+    ReadStaticField,
+    StoreStaticField,
+    BinaryOperation,
+}
+
+#[derive(Clone)]
 pub enum LastInstruction {
     FunctionCall {
         name: String,
@@ -86,10 +94,18 @@ pub enum LastInstruction {
         args: Vec<Value>,
         result: Option<Value>,
     },
-    ReadField {
+    ReadStaticField {
+        file: Arc<DexFile>,
+        class_name: String,
+        class: Arc<Class>,
+        field: Arc<Field>,
         name: String,
     },
-    StoreField {
+    StoreStaticField {
+        file: Arc<DexFile>,
+        class_name: String,
+        class: Arc<Class>,
+        field: Arc<Field>,
         name: String,
         arg: Value,
     },
@@ -271,8 +287,10 @@ impl std::fmt::Debug for LastInstruction {
                 .field("args", args)
                 .field("result", result)
                 .finish(),
-            Self::ReadField { name } => f.debug_struct("ReadField").field("name", name).finish(),
-            Self::StoreField { name, arg } => f
+            Self::ReadStaticField { name, .. } => {
+                f.debug_struct("ReadField").field("name", name).finish()
+            }
+            Self::StoreStaticField { name, arg, .. } => f
                 .debug_struct("StoreField")
                 .field("name", name)
                 .field("arg", arg)
@@ -893,34 +911,34 @@ impl InstructionFlow {
         }
         branches
     }
-    pub fn find_all_calls(&mut self, signature: &str) -> Vec<Branch> {
-        self.find_all_calls_with_op(|s| s == signature)
-    }
-    pub fn find_all_calls_regex(&mut self, regex: &Regex) -> Vec<Branch> {
-        self.find_all_calls_with_op(|s| regex.is_match(s))
-    }
-    pub fn find_all_calls_with_op<F: Fn(&str) -> bool>(&mut self, op: F) -> Vec<Branch> {
+    pub fn find_all_instruction_with_op<F: Fn(&str) -> bool>(
+        &mut self,
+        instruction: InstructionType,
+        op: F,
+    ) -> Vec<Branch> {
         let mut branches = vec![];
         let mut iterations = 0;
         self.new_branch(InstructionOffset(0), None);
         loop {
             self.next_instruction();
             for state in self.get_all_states() {
-                match &state.last_instruction {
-                    Some(LastInstruction::FunctionCall {
-                        name: _name,
-                        signature: sig,
-                        class_name: _class_name,
-                        method: _method,
-                        class: _class,
-                        args: _args,
-                        result: _result,
-                    }) if op(sig) => {
+                match (state.last_instruction.as_ref(), &instruction) {
+                    (
+                        Some(LastInstruction::FunctionCall { signature: sig, .. }),
+                        InstructionType::FunctionCall,
+                    )
+                    | (
+                        Some(LastInstruction::ReadStaticField { name: sig, .. }),
+                        InstructionType::ReadStaticField,
+                    )
+                    | (
+                        Some(LastInstruction::StoreStaticField { name: sig, .. }),
+                        InstructionType::StoreStaticField,
+                    ) if op(sig) => {
                         if let Some(b) = self.branches.iter().find(|a| a.state.id == state.id) {
                             branches.push(b.clone());
                         }
                     }
-
                     _ => {}
                 }
             }
@@ -932,6 +950,30 @@ impl InstructionFlow {
             }
             iterations += 1;
         }
+    }
+
+    pub fn find_all_calls(&mut self, signature: &str) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::FunctionCall, |s| s == signature)
+    }
+    pub fn find_all_calls_regex(&mut self, regex: &Regex) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::FunctionCall, |s| regex.is_match(s))
+    }
+    pub fn find_all_calls_with_op<F: Fn(&str) -> bool>(&mut self, op: F) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::FunctionCall, op)
+    }
+
+    pub fn find_all_static_reads(&mut self, name: &str) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::ReadStaticField, |s| s == name)
+    }
+    pub fn find_all_static_reads_regex(&mut self, regex: &Regex) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::ReadStaticField, |s| regex.is_match(s))
+    }
+
+    pub fn find_all_static_writes(&mut self, name: &str) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::StoreStaticField, |s| s == name)
+    }
+    pub fn find_all_static_writes_regex(&mut self, regex: &Regex) -> Vec<Branch> {
+        self.find_all_instruction_with_op(InstructionType::StoreStaticField, |s| regex.is_match(s))
     }
     pub fn next_instruction(&mut self) {
         let mut branches_to_add: Vec<(InstructionOffset, Branch)> = vec![];
@@ -1539,19 +1581,65 @@ impl InstructionFlow {
                 }
 
                 // FieldAccess
-                Instruction::StaticGet(dst, _)
-                | Instruction::StaticGetObject(dst, _)
-                | Instruction::StaticGetBoolean(dst, _)
-                | Instruction::StaticGetByte(dst, _)
-                | Instruction::StaticGetChar(dst, _)
-                | Instruction::StaticGetShort(dst, _) => {
+                Instruction::StaticGet(dst, field)
+                | Instruction::StaticGetObject(dst, field)
+                | Instruction::StaticGetBoolean(dst, field)
+                | Instruction::StaticGetByte(dst, field)
+                | Instruction::StaticGetChar(dst, field)
+                | Instruction::StaticGetShort(dst, field) => {
                     let dst: u8 = (dst).into();
                     b.state.registers[dst as usize] = Value::Empty;
+                    if let Some(field) = self.dex.fields.get(field as usize) {
+                        let class_name = self
+                            .dex
+                            .get_type_name(field.class_idx)
+                            .unwrap_or_default()
+                            .to_string();
+                        let class = self
+                            .dex
+                            .get_class_by_type(field.class_idx)
+                            .unwrap_or(Arc::new(Class {
+                                class_name: class_name.to_string(),
+                                class_idx: field.class_idx as u32,
+                                ..Default::default()
+                            }))
+                            .clone();
+                        b.state.last_instruction = Some(LastInstruction::ReadStaticField {
+                            file: self.dex.clone(),
+                            class,
+                            class_name,
+                            field: field.clone(),
+                            name: field.name.to_string(),
+                        });
+                    }
                 }
-                Instruction::StaticGetWide(dst, _) => {
+                Instruction::StaticGetWide(dst, field) => {
                     let dst: u8 = (dst).into();
                     b.state.registers[dst as usize] = Value::Empty;
                     b.state.registers[dst as usize + 1] = Value::Empty;
+                    if let Some(field) = self.dex.fields.get(field as usize) {
+                        let class_name = self
+                            .dex
+                            .get_type_name(field.class_idx)
+                            .unwrap_or_default()
+                            .to_string();
+                        let class = self
+                            .dex
+                            .get_class_by_type_name_idx(field.class_idx)
+                            .unwrap_or(Arc::new(Class {
+                                class_name: class_name.to_string(),
+                                class_idx: field.class_idx as u32,
+                                ..Default::default()
+                            }))
+                            .clone();
+                        b.state.last_instruction = Some(LastInstruction::ReadStaticField {
+                            file: self.dex.clone(),
+                            class,
+                            class_name,
+                            field: field.clone(),
+                            name: field.name.to_string(),
+                        });
+                    }
                 }
                 Instruction::StaticPut(_, _) => {}
                 Instruction::StaticPutWide(_, _) => {}

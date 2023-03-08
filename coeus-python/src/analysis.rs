@@ -31,7 +31,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::Regex;
 
 use crate::{
-    parse::{AnalyzeObject, Runtime},
+    parse::{AnalyzeObject, Runtime, Dex},
     vm::{DexVm, VmResult},
 };
 
@@ -1312,6 +1312,72 @@ const {function_name} = {class_without_pkg}.{function_name}.overload({arguments}
         }
         branchings
     }
+
+    pub fn find_static_field_read(&self, signature: &str) -> Vec<DexField> {
+        let mut field_read = vec![];
+        let regex = Regex::new(signature).unwrap();
+        if let Some(code) = &self.method_data {
+            if let Some(code) = &code.code {
+                let mut instruction_flow = InstructionFlow::new(code.clone(), self.file.clone(), true);
+                let branches = instruction_flow
+                    .find_all_static_reads_regex(&regex)
+                    .iter()
+                    .filter_map(|a| a.state.last_instruction.clone())
+                    .filter_map(|last_instruction| match last_instruction {
+                        LastInstruction::ReadStaticField { file, class, class_name, field, name } => {
+                            
+                            let mut access_flags = None;
+                            let mut idx = None;
+                            'found_class: {
+                                if let Some(class_data) = &class.class_data {
+                                    for (index, i_f) in class_data.instance_fields.iter().enumerate() {
+                                        if let Some(instance_field) = file.fields.get(i_f.field_idx as usize) {
+                                            if instance_field == &field {
+                                                idx = Some(index);
+                                                access_flags = Some(i_f.access_flags);
+                                                break 'found_class;
+                                            }
+                                        }
+                                    }
+                                    for (index, s_f) in class_data.static_fields.iter().enumerate() {
+                                        if let Some(static_field) = file.fields.get(s_f.field_idx as usize) {
+                                            if static_field == &field {
+                                                idx = Some(index);
+                                                access_flags = Some(s_f.access_flags);
+                                                break 'found_class;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            let value = if let Some(idx) = idx {
+                                class.static_fields.get(idx).map(|value| {
+                                    FieldValue::from(value.clone())
+                                })
+                            } else {
+                                None
+                            };
+                            Some(DexField {
+                                field,
+                                access_flags,
+                                file: file.clone(),
+                                field_name: Some(name),
+                                dex_class: Class {
+                                    class,
+                                    file,
+                                },
+                                value
+                            })
+                        },
+                        _ => None
+                    })
+                    .collect::<Vec<DexField>>();
+                field_read.extend(branches);
+            }
+        }
+        field_read
+    }
+
     pub fn find_method_call(&self, signature: &str) -> Vec<Instruction> {
         let mut f_calls = vec![];
         let regex = Regex::new(signature).unwrap();
