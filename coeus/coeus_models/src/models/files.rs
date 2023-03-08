@@ -93,18 +93,25 @@ impl Files {
         }
         let mut localized_strings = HashMap::new();
         let mut entry_name = String::default();
+        let mut spec_id = 0;
         for resource in &ty.configs {
-            if let Some(entry) = resource.resources.resources.get((id as usize) & 0xff_ff) {
+            if let Some(entry) = resource
+                .resources
+                .resources
+                .iter()
+                .find(|r| r.spec_id == (id as usize) & 0xff_ff)
+            {
                 let locale = if &resource.id[8..10] == [0, 0] {
                     "default".to_string()
                 } else if let Ok(locale) = std::str::from_utf8(&resource.id[8..10]) {
                     locale.to_string()
                 } else {
-                    "default".to_string()
+                    continue;
                 };
                 if let Some(name) = pkg.key_names.strings.get(entry.name_index) {
                     entry_name = name.to_string();
                 }
+
                 match &entry.value {
                     arsc::ResourceValue::Plain(a) => {
                         if a.is_string() {
