@@ -1,12 +1,12 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::{
-    convert::{TryFrom},
-    sync::{Arc,Mutex},
+    convert::TryFrom,
+    sync::{Arc, Mutex},
 };
 
 use goblin::elf::Sym;
@@ -287,7 +287,7 @@ const STRINGS: [ObjectType; 1] = [ObjectType::String];
 
 pub fn find_all_matches(reg: &Regex, files: &Files) -> Vec<Evidence> {
     let mut matches = find_string_matches_in_dex_with_type(&reg, &ALL_TYPES, &files.multi_dex);
-    matches.extend(find_string_matches_in_elf(&reg, &files.binaries));
+    matches.extend(find_string_matches_in_elf(&reg, &files.binaries, false));
     matches
 }
 pub fn find_classes(reg: &Regex, files: &Files) -> Vec<Evidence> {
@@ -302,9 +302,10 @@ pub fn find_fields(reg: &Regex, files: &Files) -> Vec<Evidence> {
 }
 
 pub fn find_strings(reg: &Regex, files: &Files) -> Vec<Evidence> {
-    let mut matches = find_string_matches_in_dex_with_type(&reg, &STRINGS, &files.multi_dex);
-    matches.extend(find_string_matches_in_elf(&reg, &files.binaries));
-    matches
+    find_string_matches_in_dex_with_type(&reg, &STRINGS, &files.multi_dex)
+}
+pub fn find_strings_native(reg: &Regex, files: &Files, only_symbols: bool) -> Vec<Evidence> {
+    find_string_matches_in_elf(&reg, &files.binaries, only_symbols)
 }
 
 pub fn find_any(reg: &Regex, object_types: &[ObjectType], files: &Files) -> Vec<Evidence> {
@@ -333,5 +334,4 @@ pub fn get_methods(files: &Files) -> Vec<Evidence> {
         }
     });
     all_methods
-
 }

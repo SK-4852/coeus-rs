@@ -82,6 +82,7 @@ pub fn find_binary_pattern_in_elf<'a>(
 pub fn find_string_matches_in_elf(
     reg: &Regex,
     files: &HashMap<String, Arc<BinaryObject>>,
+    only_symbols: bool
 ) -> Vec<Evidence> {
     let mut matches = vec![];
     let vec_lock = Arc::new(Mutex::new(&mut matches));
@@ -128,7 +129,7 @@ pub fn find_string_matches_in_elf(
                     lock.extend(symbol_matches);
                 }
             }
-            Some(_) => {
+            Some(_) if !only_symbols => {
                 let mut tmp_matches: Vec<Evidence> = vec![];
                 let str_lossy = object.get_utf8_lossy();
                 for mat in reg.find_iter(&str_lossy) {
@@ -143,7 +144,7 @@ pub fn find_string_matches_in_elf(
                     lock.extend(tmp_matches);
                 }
             }
-            None => {}
+            _ => {}
         };
     });
     matches

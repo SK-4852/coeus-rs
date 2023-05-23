@@ -378,6 +378,19 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
+     #[pyo3(text_signature = "($self, regex, only_symbols, /)")]
+    pub fn find_strings_native(
+        &self,
+        regex: &str,
+        only_symbols: bool,
+    ) -> PyResult<Vec<crate::analysis::Evidence>> {
+        let regex = Regex::new(regex).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = coeus::coeus_analysis::analysis::find_strings_native(&regex, &self.files, only_symbols);
+        Ok(files
+            .into_iter()
+            .map(|evidence| crate::analysis::Evidence { evidence })
+            .collect())
+    }
     /// Find methods in the analyzed object by utilising a regular expression
     #[pyo3(text_signature = "($self, name,/)")]
     pub fn find_classes(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {

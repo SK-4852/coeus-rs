@@ -350,7 +350,9 @@ class AnalyzeObject:
     def find_fields(self, regex: str) -> list[Evidence]:
         """Look for fields matching the specified regex"""
     def find_strings(self, regex: str) -> list[Evidence]:
-        """Look for strings matching the specified regex"""
+        """Look for strings matching the specified regex within all dex files"""
+    def find_strings_native(self, regex: str, only_symbols: bool) -> list[Evidence]:
+        """Look for strings matching the specified regex within all files except dex. If `only_symbol` is true, only matches for elf files are returned."""
     def find_classes(self, regex: str) -> list[Evidence]:
         """Look for classes matching the specified regex"""
     def get_classes(self) -> list[Evidence]:
