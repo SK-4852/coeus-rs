@@ -883,6 +883,7 @@ impl InstructionFlow {
                 let instruction = if let Some(instruction) = self.method.get(&b.pc) {
                     instruction
                 } else {
+                    log::debug!("NO INSTRUCTION FOUND AT {:?}", b.pc);
                     continue;
                 };
 
@@ -980,12 +981,18 @@ impl InstructionFlow {
         // let mut branches_to_remove: Vec<u64> = vec![];
         let mut branches_to_taint: Vec<u64> = vec![];
         for b in self.branches.iter_mut().filter(|b| !b.finished) {
+            if b.pc != InstructionOffset(0) && b.previous_pc == b.pc {
+                b.finished = true;
+                log::debug!("WE DID NOT STEP {:?}", self.method.get(&b.pc));
+                continue;
+            }
             b.previous_pc = b.pc;
             let instruction = if let Some(instruction) = self.method.get(&b.pc) {
                 instruction
             } else {
                 // branches_to_remove.push(b.id);
                 b.finished = true;
+                log::debug!("NO INSTRUCTION FOUND AT {:?}", b.pc);
                 continue;
             };
 
@@ -1011,7 +1018,7 @@ impl InstructionFlow {
                     if self
                         .already_branched
                         .iter()
-                        .any(|(_, offset)| offset == &b.pc)
+                        .any(|(id, offset)| offset == &b.pc && id == &b.id)
                     {
                         branches_to_taint.push(b.id);
                         for b in self.already_branched.iter()
@@ -1019,6 +1026,8 @@ impl InstructionFlow {
                         {
                             branches_to_taint.push(b.0);
                         }
+                        b.pc += instruction.0 .0 / 2;
+                        log::debug!("We have already branched, continue normal flow without jump");
                         continue;
                     }
                     b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
@@ -1027,7 +1036,7 @@ impl InstructionFlow {
                         b.state.registers[u8::from(left) as usize].try_get_number(),
                         b.state.registers[u8::from(right) as usize].try_get_number(),
                     ) {
-                        log::warn!("DEAD BRANCH");
+                        log::warn!("DEAD BRANCH: {:?}", instruction);
                         let jump_to_offset = match test {
                             coeus_models::models::TestFunction::Equal => left == right,
                             coeus_models::models::TestFunction::NotEqual => left != right,
@@ -1058,7 +1067,7 @@ impl InstructionFlow {
                     if self
                         .already_branched
                         .iter()
-                        .any(|(_, offset)| offset == &b.pc)
+                        .any(|(id, offset)| offset == &b.pc && &b.id == id)
                     {
                         branches_to_taint.push(b.id);
                         for b in self.already_branched.iter()
@@ -1066,6 +1075,8 @@ impl InstructionFlow {
                         {
                             branches_to_taint.push(b.0);
                         }
+                        b.pc += instruction.0 .0 / 2;
+                        log::debug!("We have already branched, continue normal flow without jump");
                         continue;
                     }
                     b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
