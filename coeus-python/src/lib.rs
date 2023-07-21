@@ -19,5 +19,11 @@ fn coeus_python(py: Python, m: &PyModule) -> PyResult<()> {
     parse::register(py, m)?;
     vm::register(py, m)?;
     debugging::register(py, m)?;
+    m.add_function(wrap_pyfunction!(init_logging,m)?)?;
     Ok(())
+}
+
+#[pyfunction]
+fn init_logging() {
+    env_logger::init()
 }
