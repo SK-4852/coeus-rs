@@ -69,7 +69,7 @@ impl Files {
 
         let mut visitor = ModelVisitor::default();
         Executor::arsc(&self.binary_resource_file, &mut visitor).ok()?;
-        Executor::arsc(&android_resources_content, &mut visitor).ok();
+        Executor::arsc(&android_resources_content, &mut visitor).ok()?;
         let mut visitor = XmlVisitor::new(visitor.get_resources());
         let _ = Executor::xml(Cursor::new(&binary_xml), &mut visitor);
         visitor.into_string().ok()
