@@ -12,7 +12,7 @@ pub mod parse;
 pub mod vm;
 pub mod debugging;
 
-/// Coeur wrapper for python
+/// Coeus wrapper for python
 #[pymodule]
 fn coeus_python(py: Python, m: &PyModule) -> PyResult<()> {
     analysis::register(py, m)?;
