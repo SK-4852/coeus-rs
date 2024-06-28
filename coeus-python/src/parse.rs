@@ -176,7 +176,7 @@ impl AnalyzeObject {
 
         if name.ends_with(".xml") {
             let xml = match self.files.decode_resource(bin_object.data()) {
-                Some(inner_xml) => inner_xml,
+                Some(xml) => xml,
                 None => {
                     println!("Could not decode file {}", name);
                     String::from("") 
