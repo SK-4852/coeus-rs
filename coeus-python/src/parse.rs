@@ -111,6 +111,10 @@ impl AnalyzeObject {
         self.supergraph = Some(supergraph.clone());
         Ok(supergraph)
     }
+
+    pub fn get_file_field(&self) -> &Files {
+        &self.files
+    }
 }
 
 #[pymethods]
@@ -171,7 +175,13 @@ impl AnalyzeObject {
         let bin_object = self.files.binaries.get(name).unwrap();
 
         if name.ends_with(".xml") {
-            let xml = self.files.decode_resource(bin_object.data()).unwrap();
+            let xml = match self.files.decode_resource(bin_object.data()) {
+                Some(xml) => xml,
+                None => {
+                    println!("Could not decode file {}", name);
+                    String::from("") 
+                },
+            };
             let result = xml.as_bytes();
             PyBytes::new(py, result).into()
         } else {

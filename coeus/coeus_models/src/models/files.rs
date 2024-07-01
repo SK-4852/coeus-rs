@@ -65,8 +65,11 @@ impl Files {
             .cloned()
     }
     pub fn decode_resource(&self, binary_xml: &[u8]) -> Option<String> {
+        let android_resources_content = abxml::STR_ARSC.to_owned();
+
         let mut visitor = ModelVisitor::default();
         Executor::arsc(&self.binary_resource_file, &mut visitor).ok()?;
+        Executor::arsc(&android_resources_content, &mut visitor).ok()?;
         let mut visitor = XmlVisitor::new(visitor.get_resources());
         let _ = Executor::xml(Cursor::new(&binary_xml), &mut visitor);
         visitor.into_string().ok()
