@@ -9,9 +9,9 @@ name = "coeus_python"
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-pyo3 = { version = "0.18.1", features = ["extension-module", "abi3-py37", "generate-import-lib"] }
+#pyo3 = { version = "0.18.1", features = ["extension-module", "abi3-py37", "generate-import-lib"] }
 # Hint: if you want to use this library in another Rust binary, use the following line instead:
-#pyo3 = { version = "0.18.1", features = ["abi3-py37", "generate-import-lib"] }
+pyo3 = { version = "0.18.1", features = ["abi3-py37", "generate-import-lib"] }
 coeus = {version = "0.1.1", path = "../coeus"}
 regex = "1.7.1"
 rayon = "1.6.1"

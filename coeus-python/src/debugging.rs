@@ -21,6 +21,7 @@ use crate::{analysis::Method, parse::AnalyzeObject};
 
 #[pyclass]
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct VmBreakpoint {
     request_id: u32,
     class_name: String,
