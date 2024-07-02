@@ -96,7 +96,7 @@ impl Files {
         }
         let mut localized_strings = HashMap::new();
         let mut entry_name = String::default();
-        let mut spec_id = 0;
+
         for resource in &ty.configs {
             if let Some(entry) = resource
                 .resources

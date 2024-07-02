@@ -451,6 +451,7 @@ impl FromBytes for StackFrame {
     }
 }
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Composite {
     suspend_policy: u8,
     pub events: Vec<Event>,
@@ -462,6 +463,7 @@ pub enum Event {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SimpleEventData {
     request_id: u32,
     thread_id: u64,
@@ -635,6 +637,7 @@ impl Thread {
     }
 }
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Slot {
     code_index: u64,
     name: String,
@@ -687,6 +690,7 @@ impl FromBytes for Slot {
     }
 }
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SlotValue {
     ty: u8,
     pub value: Value,
