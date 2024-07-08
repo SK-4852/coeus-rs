@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::analysis::Method;
+use crate::analysis::DexString;
 
 #[pyclass]
 #[derive(Clone)]
@@ -411,7 +412,6 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
-
     /// Get all classes
     #[pyo3(text_signature = "($self)")]
     pub fn get_classes(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
@@ -422,6 +422,21 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
+    /// Get all classes as a vector of coeus-python::analysis::Class
+    #[pyo3(text_signature = "($self)")]
+    pub fn get_classes_as_class(&self) -> PyResult<Vec<crate::analysis::Class>> {
+        let regex = Regex::new("").map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let files = find_classes(&regex, &self.files);
+        let classes: Vec<crate::analysis::Class> = files
+            .into_iter()
+            .map(|evidence| {
+                let evi = crate::analysis::Evidence { evidence };
+                evi.as_class().unwrap()
+            }
+            )
+            .collect();
+        Ok(classes)
+    }
     /// Get all methods
     #[pyo3(text_signature = "($self,/)")]
     pub fn get_methods(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
@@ -430,6 +445,20 @@ impl AnalyzeObject {
             .into_iter()
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
+    }
+    /// Get all methods as a vector of coeus-python::analysis::Method
+    #[pyo3(text_signature = "($self,/)")]
+    pub fn get_methods_as_method(&self) -> PyResult<Vec<crate::analysis::Method>> {
+        let mthds = get_methods(&self.files);
+        let methods: Vec<Method> = mthds
+            .into_iter()
+            .map(|evidence| 
+                { 
+                    let evi = crate::analysis::Evidence { evidence };
+                    evi.as_method().unwrap()
+                })
+            .collect();
+        Ok(methods)
     }
     /// Get all strings
     #[pyo3(text_signature = "($self,/)")]
@@ -441,6 +470,20 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
+    /// Get all strings as a vector of DexString
+    #[pyo3(text_signature = "($self,/)")]
+    pub fn get_strings_as_string(&self) -> PyResult<Vec<crate::analysis::DexString>> {
+        let regex = Regex::new("").map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let strings = coeus::coeus_analysis::analysis::find_strings(&regex, &self.files);
+        let strings: Vec<DexString> = strings
+            .into_iter()
+            .map(|evidence| {
+                    let evi = crate::analysis::Evidence { evidence };
+                    evi.as_string().unwrap()
+                })
+            .collect();
+        Ok(strings)
+    }
     /// Get all fields
     #[pyo3(text_signature = "($self,/)")]
     pub fn get_fields(&self) -> PyResult<Vec<crate::analysis::Evidence>> {
@@ -450,6 +493,20 @@ impl AnalyzeObject {
             .into_iter()
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
+    }
+    /// Get all fields as a vector of DexField
+    #[pyo3(text_signature = "($self,/)")]
+    pub fn get_fields_as_field(&self) -> PyResult<Vec<crate::analysis::DexField>> {
+        let regex = Regex::new("").map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
+        let fields = find_fields(&regex, &self.files);
+        let fields: Vec<crate::analysis::DexField> = fields
+            .into_iter()
+            .map(|evidence| {
+                    let evi = crate::analysis::Evidence { evidence };
+                    evi.as_field().unwrap()
+                })
+            .collect();
+        Ok(fields)
     }
     #[pyo3(text_signature = "($self, name,/)")]
     pub fn find(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
