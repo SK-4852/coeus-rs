@@ -826,7 +826,7 @@ impl Evidence {
             _ => Err(PyRuntimeError::new_err("not a method")),
         }
     }
-    /// Cast the Evidence as a method by extracting the Context
+    /// Cast the Evidence as a class by extracting the Context
     #[pyo3(text_signature = "($self)")]
     pub fn as_class(&self) -> PyResult<self::Class> {
         let context = if matches!(self.evidence, analysis::Evidence::CrossReference(..)) {
