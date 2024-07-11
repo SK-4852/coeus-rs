@@ -362,11 +362,11 @@ class AnalyzeObject:
     def get_strings(self) -> list[Evidence]:
         """Return all strings"""
     def get_strings_as_string(self) -> list[DexString]:
-        """Return all classes already casted to the DexString type"""
+        """Return all strings already casted to the DexString type"""
     def get_methods(self) -> list[Evidence]:
         """Return all methods"""
     def get_methods_as_method(self) -> list[Method]:
-        """Return all classes already casted to the Method type"""
+        """Return all methods already casted to the Method type"""
     def get_fields(self) -> list[Evidence]:
         """Return all fields"""
     def get_fields_as_field(self) -> list[DexField]:
