@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::sync::Arc;
+use base64::{Engine as _, engine::{general_purpose}};
 
 use coeus_emulation::vm::{VMException, VM, Value, runtime::StringClass, Register};
 use coeus_models::models::{Field, EncodedItem, DexFile, Method};
@@ -48,7 +49,7 @@ impl std::fmt::Display for StaticRegister {
                 }
             )?;
         } else if self.is_array {
-            write!(f, "base64decode({})", base64::encode(&self.inner_data))?;
+            write!(f, "base64decode({})", general_purpose::STANDARD.encode(&self.inner_data))?;
         } else {
             write!(f, "[{:?}]", self.ty)?;
         }
@@ -156,7 +157,7 @@ impl FunctionTransformation {
                 StaticRegisterData::Array { base64 } => vm.new_instance(
                     "[B".to_string(),
                     Value::Array(
-                        base64::decode(&base64).map_err(|_| VMException::InvalidRegisterType)?,
+                        general_purpose::STANDARD.decode(&base64).map_err(|_| VMException::InvalidRegisterType)?,
                     ),
                 )?,
                 StaticRegisterData::String { content } => vm.new_instance(
@@ -181,7 +182,7 @@ impl FunctionTransformation {
             .ok_or(VMException::RegisterNotFound(0))?;
         Ok(match result {
             Value::Array(a) => StaticRegisterData::Array {
-                base64: base64::encode(&a),
+                base64: general_purpose::STANDARD.encode(&a),
             },
             Value::Object(s) => {
                 if s.class.class_name == StringClass::class_name() {

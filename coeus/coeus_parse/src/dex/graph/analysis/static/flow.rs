@@ -9,6 +9,7 @@ use std::{collections::HashMap, sync::Arc};
 use coeus_emulation::vm::{VM, runtime::StringClass};
 use coeus_models::models::{InstructionOffset, InstructionSize, Instruction, DexFile, Class, TestFunction};
 use petgraph::graph::NodeIndex;
+use base64::{Engine as _, engine::{general_purpose}};
 
 use crate::dex::graph::{ChangeSet, InfoNode};
 
@@ -519,7 +520,7 @@ impl<'a> Flow<'a> {
                             is_array: true,
                             is_argument: false,
                             data: Some(StaticRegisterData::Array {
-                                base64: base64::encode(array_data),
+                                base64: general_purpose::STANDARD.encode(array_data),
                             }),
                             transformation: None,
                             inner_data: vec![],

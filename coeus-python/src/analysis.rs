@@ -24,14 +24,14 @@ use coeus::{
 };
 use pyo3::{
     exceptions::PyRuntimeError,
-    types::{PyDict, PyTuple, PyString},
+    types::{PyDict, PyTuple},
 };
 use pyo3::{prelude::*, types::PyList};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::Regex;
 
 use crate::{
-    parse::{AnalyzeObject, Runtime, Dex},
+    parse::{AnalyzeObject, Runtime},
     vm::{DexVm, VmResult},
 };
 
@@ -100,6 +100,7 @@ impl From<EncodedItem> for FieldValue {
     }
 }
 #[pyclass]
+#[allow(dead_code)]
 pub struct Graph {
     supergraph: Arc<Supergraph>,
     subgraph: Option<Subgraph>
@@ -825,7 +826,7 @@ impl Evidence {
             _ => Err(PyRuntimeError::new_err("not a method")),
         }
     }
-    /// Cast the Evidence as a method by extracting the Context
+    /// Cast the Evidence as a class by extracting the Context
     #[pyo3(text_signature = "($self)")]
     pub fn as_class(&self) -> PyResult<self::Class> {
         let context = if matches!(self.evidence, analysis::Evidence::CrossReference(..)) {
@@ -1324,7 +1325,7 @@ const {function_name} = {class_without_pkg}.{function_name}.overload({arguments}
                     .iter()
                     .filter_map(|a| a.state.last_instruction.clone())
                     .filter_map(|last_instruction| match last_instruction {
-                        LastInstruction::ReadStaticField { file, class, class_name, field, name } => {
+                        LastInstruction::ReadStaticField { file, class, class_name: _, field, name } => {
                             
                             let mut access_flags = None;
                             let mut idx = None;
@@ -1435,7 +1436,7 @@ const {function_name} = {class_without_pkg}.{function_name}.overload({arguments}
             file: self.file.clone(),
         }
     }
-    #[args(args = "*", kwargs = "**")]
+    #[pyo3(signature = (*args, **kwargs))]
     pub fn __call__(
         &self,
         py: Python,

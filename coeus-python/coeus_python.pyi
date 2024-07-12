@@ -357,12 +357,20 @@ class AnalyzeObject:
         """Look for classes matching the specified regex"""
     def get_classes(self) -> list[Evidence]:
         """Return all classes"""
+    def get_classes_as_class(self) -> list[Class]:
+        """Return all classes already casted to the Class type"""
     def get_strings(self) -> list[Evidence]:
         """Return all strings"""
+    def get_strings_as_string(self) -> list[DexString]:
+        """Return all strings already casted to the DexString type"""
     def get_methods(self) -> list[Evidence]:
         """Return all methods"""
+    def get_methods_as_method(self) -> list[Method]:
+        """Return all methods already casted to the Method type"""
     def get_fields(self) -> list[Evidence]:
         """Return all fields"""
+    def get_fields_as_field(self) -> list[DexField]:
+        """Return all fields already casted to the DexField type"""        
     def find_native_imports(self, file: str, pattern: str) -> list[Evidence]:
         """Check the dynamic_string table of the elf binary to look for imported functions"""
     def find_native_exports(self, file: str, pattern: str) -> list[Evidence]:

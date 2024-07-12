@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use std::{collections::HashMap, sync::Arc};
+use base64::{Engine as _, engine::{general_purpose}};
 
 use lazy_static::lazy_static;
 
@@ -1010,7 +1011,7 @@ impl AndroidBase64 {
                     builder_instance.internal_state.get("tmp_string")
                 {
                     log::debug!("Executing built in Base64->decode");
-                    let base64bytes = base64::decode(content).expect("Could not decode");
+                    let base64bytes = general_purpose::STANDARD.decode(content).expect("Could not decode");
                     let reg = vm.new_instance("[B".to_string(), Value::Array(base64bytes))?;
                     vm.current_state.return_reg = reg;
                 }
@@ -1024,7 +1025,7 @@ impl AndroidBase64 {
             log::debug!("Executing built in Base64->decode");
             if let Some(Value::Array(array)) = vm.heap.get_mut(&address) {
                 log::debug!("Executing built in Base64->decode");
-                let base64_string = base64::encode(&array);
+                let base64_string = general_purpose::STANDARD.encode(&array);
                 let mut the_state = HashMap::new();
                 the_state.insert(
                     "tmp_string".to_string(),
