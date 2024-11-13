@@ -191,6 +191,13 @@ impl AnalyzeObject {
         }
     }
 
+    pub fn get_raw_file(&self, py: Python, name: &str) -> PyObject {
+        let mut _file_content: String;
+        let bin_object = self.files.binaries.get(name).unwrap();
+        let result = bin_object.data();
+        PyBytes::new(py, result).into()
+    }
+
     /// Find all dynamically registered native functions
     pub fn find_dynamically_registered_functions(
         &self,
