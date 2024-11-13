@@ -191,6 +191,7 @@ impl AnalyzeObject {
         }
     }
 
+    /// Get file contents but without decoding xml files like AndroidManifest.xml or ARSC files
     pub fn get_raw_file(&self, py: Python, name: &str) -> PyObject {
         let mut _file_content: String;
         let bin_object = self.files.binaries.get(name).unwrap();
