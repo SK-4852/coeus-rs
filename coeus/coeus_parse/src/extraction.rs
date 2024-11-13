@@ -45,6 +45,10 @@ pub fn extract_single_threaded(
         let file_name = format!("{}/{}", archive_name, file.name());
         if file.name().contains("AndroidManifest.xml") {
             bin_manifest = zip_bytes;
+            other_files.insert(
+                file.name().to_string(),
+                Arc::new(BinaryObject::new(bin_manifest.to_vec())),
+            );
             continue;
         } else if file.name().contains("resources.arsc") {
             bin_res_file = zip_bytes;
@@ -147,6 +151,10 @@ pub fn extract_zip(
         if file.name().contains("AndroidManifest.xml") {
             log::info!("Found AndroidManifest.xml in {}", archive_name);
             bin_manifest = zip_bytes;
+            other_files.insert(
+                file.name().to_string(),
+                Arc::new(BinaryObject::new(bin_manifest.to_vec())),
+            );
             continue;
         } else if file.name().contains("resources.arsc") {
             log::info!("Found resources.arsc in {}", archive_name);
