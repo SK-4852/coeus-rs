@@ -1722,11 +1722,11 @@ impl Class {
             .ok_or_else(|| PyRuntimeError::new_err("method not found"))
     }
 
-    pub fn get_method_by_proto_type(&self,name: &str, signature: &str) -> PyResult<Method> {
+    pub fn get_method_by_proto_type(&self,name: &str, proto_name: &str) -> PyResult<Method> {
         self.class
             .codes
             .iter()
-            .find(|a| (a.method.method_name == name) && (a.method.proto_name == signature))
+            .find(|a| (a.method.method_name == name) && (a.method.proto_name == proto_name))
             .map(|method| Method {
                 method: method.method.clone(),
                 method_data: Some(method.clone()),
