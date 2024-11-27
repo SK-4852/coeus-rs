@@ -1722,6 +1722,20 @@ impl Class {
             .ok_or_else(|| PyRuntimeError::new_err("method not found"))
     }
 
+    pub fn get_method_by_proto_type(&self,name: &str, signature: &str) -> PyResult<Method> {
+        self.class
+            .codes
+            .iter()
+            .find(|a| (a.method.method_name == name) && (a.method.proto_name == signature))
+            .map(|method| Method {
+                method: method.method.clone(),
+                method_data: Some(method.clone()),
+                file: self.file.clone(),
+                class: self.class.clone(),
+            })
+            .ok_or_else(|| PyRuntimeError::new_err("method not found"))
+    }
+
     pub fn get_field(&self, name: &str) -> PyResult<DexField> {
         let class_data = if let Some(c_d) = self.class.class_data.as_ref() {
             c_d
