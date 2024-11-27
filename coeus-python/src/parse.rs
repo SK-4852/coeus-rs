@@ -377,7 +377,7 @@ impl AnalyzeObject {
             .collect())
     }
 
-    /// Find methods in the analyzed object by utilising a regular expression
+    /// Find fields in the analyzed object by utilising a regular expression
     #[pyo3(text_signature = "($self, name,/)")]
     pub fn find_fields(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
         let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
@@ -387,7 +387,7 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
-    /// Find methods in the analyzed object by utilising a regular expression
+    /// Find strings in the analyzed object by utilising a regular expression
     #[pyo3(text_signature = "($self, name,/)")]
     pub fn find_strings(&self, name: &str) -> PyResult<Vec<crate::analysis::Evidence>> {
         let regex = Regex::new(name).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
