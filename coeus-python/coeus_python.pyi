@@ -275,7 +275,7 @@ class Class:
         """Get all methods found on this class"""
     def get_method(self, name: str) -> Method:
         """Get a method of this class by name"""
-    def get_method_by_signature(self, name: str, signature: str) -> Method:
+    def get_method_by_proto_type(self, name: str, signature: str) -> Method:
         """Get a method of this class by name, input arguments and return value"""
     def __getitem__(self, name: str) -> Method:
         """Get a method of this class by name"""
