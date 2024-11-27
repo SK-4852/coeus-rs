@@ -278,7 +278,7 @@ class Class:
     def get_method_by_signature(self, name: str, signature: str) -> Method:
         """Get a method of this class by name"""
     def __getitem__(self, name: str) -> Method:
-        """Get a method of this class by name"""
+        """Get a method of this class by name, input and return arguments"""
     def get_field(self, name: str) -> DexField:
         """Return an instance field"""
     def get_static_field(self, name: str) -> DexField:
