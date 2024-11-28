@@ -603,7 +603,6 @@ impl VM {
         self.current_state.vm_state = ExecutionState::Running;
         self.current_state.last_instruction_size = 0.into();
 
-
         //  self.current_state.current_method_index = method_idx;
         loop {
             steps += 1;
@@ -781,6 +780,11 @@ impl VM {
                     self.binary_op_lit(dst, a, lit, |a, b|  {
                         (a as i8).wrapping_add(b as i8) as i32
                     })?;
+                }
+                &Instruction::ShrIntLit8(dst, a, lit ) => {
+                    self.binary_op_lit(dst, a, lit, |a, b|  {
+                        (a as i8).wrapping_shr(b as u32) as i32
+                    })?;                  
                 }
                 &Instruction::AddIntLit16(dst, a, lit) => {
                     let dst: u16 = dst.into();
