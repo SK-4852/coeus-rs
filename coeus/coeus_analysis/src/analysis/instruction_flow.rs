@@ -1737,7 +1737,7 @@ impl InstructionFlow {
 
                 Instruction::ShrIntLit8(dst, left, lit) => {
                     b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize].wrapping_shr(lit as i128)
+                        &b.state.registers[u8::from(left) as usize] >> (lit as i128)
                 }
 
                 Instruction::Nop => {}
