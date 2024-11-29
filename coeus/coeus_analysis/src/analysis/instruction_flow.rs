@@ -1741,7 +1741,7 @@ impl InstructionFlow {
                 }
                 Instruction::UShrIntLit8(dst, left, lit) => {
                     b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] >> (lit as i128)
+                        &b.state.registers[u8::from(left) as usize].ushr(lit as i128)
                 }
 
                 Instruction::Nop => {}
