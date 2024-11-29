@@ -173,6 +173,7 @@ pub enum Instruction {
     Throw(u8),
 
     ShrIntLit8(u8, u8, u8),
+    UShrIntLit8(u8, u8, u8),
 
     NotImpl(u8, u8),
     ArrayData(u16, Vec<u8>),
@@ -323,11 +324,12 @@ impl Debug for Instruction {
             Self::SwitchData(arg0) => f.debug_tuple("SwitchData").field(arg0).finish(),
             Self::ArbitraryData(arg0) => f.write_str(&arg0),
             Self::ShrIntLit8(arg0, arg1, arg2) => f.debug_tuple("ShrIntLit8").field(arg0).field(arg1).field(arg2).finish(),
+            Self::UShrIntLit8(arg0, arg1, arg2) => f.debug_tuple("ShrIntLit8").field(arg0).field(arg1).field(arg2).finish(),
         }
     }
 }
 
-static MNEMONICS: [&str; 81] = [
+static MNEMONICS: [&str; 82] = [
     "nop",
     "const-string",
     "const-string/jumbo",
@@ -409,6 +411,7 @@ static MNEMONICS: [&str; 81] = [
     "move",
     "const-class",
     "shr-int/lit8",
+    "ushr-int/lit8",
 ];
 
 impl Instruction {
@@ -468,6 +471,7 @@ impl Instruction {
             Instruction::CheckCast(..) => MNEMONICS[76],
             Instruction::Throw(..) => MNEMONICS[77],
             Instruction::ShrIntLit8(..) => MNEMONICS[80],
+            Instruction::UShrIntLit8(..) => MNEMONICS[81],
             _ => MNEMONICS[0],
         }
     }
@@ -1143,7 +1147,7 @@ impl Instruction {
             Instruction::ArrayLength(dst, array) => {
                 format!("{} v{}, v{}", MNEMONICS[48], dst, array)
             }
-            Instruction::AddIntLit8(dst, src, lit) | Instruction::SubIntLit8(dst, src, lit) | Instruction::ShrIntLit8(dst, src, lit) => {
+            Instruction::AddIntLit8(dst, src, lit) | Instruction::SubIntLit8(dst, src, lit) | Instruction::ShrIntLit8(dst, src, lit) | Instruction::UShrIntLit8( dst, src, lit) => {
                 format!(
                     "{} v{}, v{}, {:#x}",
                     self.mnemonic_from_opcode(),
@@ -1563,6 +1567,7 @@ impl Instruction {
             0x6d => Instruction::StaticPutShort(high, data[0]),
 
             0xe1 => Instruction::ShrIntLit8(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
+            0xe2 => Instruction::UShrIntLit8(high, (data[0] & 0xff) as u8, (data[0] >> 8) as u8),
 
             _ => Instruction::NotImpl(low[1], high),
         }

@@ -786,6 +786,11 @@ impl VM {
                         (a as i8).wrapping_shr(b as u32) as i32
                     })?;                  
                 }
+                &Instruction::UShrIntLit8(dst, a, lit ) => {
+                    self.binary_op_lit(dst, a, lit, |a, b|  {
+                        (a as i8).wrapping_shr(b as u32) as i32
+                    })?;                  
+                }
                 &Instruction::AddIntLit16(dst, a, lit) => {
                     let dst: u16 = dst.into();
                     let a: u16 = a.into();
