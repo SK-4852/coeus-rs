@@ -1734,6 +1734,16 @@ impl InstructionFlow {
                 }
                 Instruction::ArrayData(_, _) => {}
                 Instruction::SwitchData(_) => {}
+
+                Instruction::ShrIntLit8(dst, left, lit) => {
+                    b.state.registers[u8::from(dst) as usize] =
+                        &b.state.registers[u8::from(left) as usize] >> (lit as i128)
+                }
+                Instruction::UShrIntLit8(dst, left, lit) => {
+                    b.state.registers[u8::from(dst) as usize] =
+                        &b.state.registers[u8::from(left) as usize].ushr(lit as i128)
+                }
+
                 Instruction::Nop => {}
             }
             // reset last_function if this is not a function call
