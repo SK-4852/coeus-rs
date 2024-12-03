@@ -19,6 +19,14 @@ use coeus_parse::coeus_emulation::vm::{
 };
 use regex::Regex;
 
+/// Rust does implicit "casting" of the opperation to SAR or SHR depending on the
+/// type of the opperand. Since java does not know unsigned integers we introduce our
+/// custom trait
+pub trait UShr<T = Self> {
+    type Output;
+    fn ushr(self, rhs: T) -> Self::Output;
+}
+
 #[derive(Clone, Debug)]
 pub struct InstructionFlow {
     branches: Vec<Branch>,
@@ -837,6 +845,55 @@ impl<'a> Shr<i128> for &'a Value {
             return Value::Invalid;
         };
         Value::Number(lhs >> rhs)
+    }
+}
+
+impl<'a> UShr for &'a Value {
+    type Output = Value;
+
+    fn ushr(self, rhs: Self) -> Self::Output {
+        let lhs = if let Some(n) = self.try_get_number() {
+            n
+        } else if matches!(self, Value::Variable { .. }) {
+            return Value::Variable(Box::new(LastInstruction::BinaryOperation {
+                left: self.clone(),
+                right: rhs.clone(),
+                operation: |left, right| left.ushr(right),
+            }));
+        } else {
+            return Value::Invalid;
+        };
+        let rhs = if let Some(n) = rhs.try_get_number() {
+            n
+        } else if matches!(self, Value::Variable { .. }) {
+            return Value::Variable(Box::new(LastInstruction::BinaryOperation {
+                left: self.clone(),
+                right: rhs.clone(),
+                operation: |left, right| left.ushr(right),
+            }));
+        } else {
+            return Value::Invalid;
+        };
+        Value::Number(((lhs as u128) >> rhs) as i128)
+    }
+}
+
+impl<'a> UShr<i128> for &'a Value {
+    type Output = Value;
+
+    fn ushr(self, rhs: i128) -> Self::Output {
+        let lhs = if let Some(n) = self.try_get_number() {
+            n
+        } else if matches!(self, Value::Variable { .. }) {
+            return Value::Variable(Box::new(LastInstruction::BinaryOperation {
+                left: self.clone(),
+                right: Value::Number(rhs as i128),
+                operation: |left, right| left.ushr(right),
+            }));
+        } else {
+            return Value::Invalid;
+        };
+        Value::Number(((lhs as u128) >> rhs) as i128)
     }
 }
 
@@ -1741,7 +1798,7 @@ impl InstructionFlow {
                 }
                 Instruction::UShrIntLit8(dst, left, lit) => {
                     b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize].ushr(lit as i128)
+                        b.state.registers[u8::from(left) as usize].ushr(lit as i128)
                 }
 
                 Instruction::Nop => {}
