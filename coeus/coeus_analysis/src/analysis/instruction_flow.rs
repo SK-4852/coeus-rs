@@ -8,7 +8,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shl, Shr, Sub},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use coeus_models::models::{
@@ -17,6 +17,7 @@ use coeus_models::models::{
 use coeus_parse::coeus_emulation::vm::{
     runtime::StringClass, ClassInstance, Register, VMException, VM,
 };
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use regex::Regex;
 
 /// Rust does implicit "casting" of the opperation to SAR or SHR depending on the
@@ -30,12 +31,21 @@ pub trait UShr<T = Self> {
 #[derive(Clone, Debug)]
 pub struct InstructionFlow {
     branches: Vec<Branch>,
-    method: HashMap<InstructionOffset, (InstructionSize, Instruction)>,
+    method: Arc<HashMap<InstructionOffset, (InstructionSize, Instruction)>>,
     dex: Arc<DexFile>,
     register_size: u16,
     already_branched: Vec<(u64, InstructionOffset)>,
     conservative: bool,
 }
+
+impl InstructionFlow {
+    pub fn get_method_arc(
+        &self,
+    ) -> Arc<HashMap<InstructionOffset, (InstructionSize, Instruction)>> {
+        self.method.clone()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Branch {
     pub parent_id: Option<u64>,
@@ -920,7 +930,7 @@ impl InstructionFlow {
 
         Self {
             branches: vec![],
-            method,
+            method: Arc::new(method),
             dex,
             register_size,
             already_branched: vec![],
@@ -935,7 +945,7 @@ impl InstructionFlow {
         let mut branches = vec![];
         let mut iterations = 0;
         loop {
-            self.next_instruction();
+            self.next_instruction(self.method.clone());
             for b in &self.branches {
                 let instruction = if let Some(instruction) = self.method.get(&b.pc) {
                     instruction
@@ -978,7 +988,7 @@ impl InstructionFlow {
         let mut iterations = 0;
         self.new_branch(InstructionOffset(0), None);
         loop {
-            self.next_instruction();
+            self.next_instruction(self.method.clone());
             for state in self.get_all_states() {
                 match (state.last_instruction.as_ref(), &instruction) {
                     (
@@ -1003,9 +1013,13 @@ impl InstructionFlow {
             if self.is_done() {
                 return branches;
             }
+            if self.branches.len() > 300 && iterations > 150 {
+                return branches;
+            }
             if iterations > MAX_ITERATIONS {
                 return branches;
             }
+
             iterations += 1;
         }
     }
@@ -1033,376 +1047,420 @@ impl InstructionFlow {
     pub fn find_all_static_writes_regex(&mut self, regex: &Regex) -> Vec<Branch> {
         self.find_all_instruction_with_op(InstructionType::StoreStaticField, |s| regex.is_match(s))
     }
-    pub fn next_instruction(&mut self) {
-        let mut branches_to_add: Vec<(InstructionOffset, Branch)> = vec![];
-        // let mut branches_to_remove: Vec<u64> = vec![];
-        let mut branches_to_taint: Vec<u64> = vec![];
-        for b in self.branches.iter_mut().filter(|b| !b.finished) {
-            if b.pc != InstructionOffset(0) && b.previous_pc == b.pc {
-                b.finished = true;
-                log::debug!("WE DID NOT STEP {:?}", self.method.get(&b.pc));
-                continue;
-            }
-            b.previous_pc = b.pc;
-            let instruction = if let Some(instruction) = self.method.get(&b.pc) {
-                instruction
-            } else {
-                // branches_to_remove.push(b.id);
-                b.finished = true;
-                log::debug!("NO INSTRUCTION FOUND AT {:?}", b.pc);
-                continue;
-            };
+    pub fn next_instruction(
+        &mut self,
+        method: Arc<HashMap<InstructionOffset, (InstructionSize, Instruction)>>,
+    ) {
+        let branches_to_add: Arc<Mutex<Vec<(InstructionOffset, Branch)>>> =
+            Arc::new(Mutex::new(vec![]));
+        let clone_branches_to_add = branches_to_add.clone();
+        let branches_to_taint: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(vec![]));
+        let clone_branches_to_taint = branches_to_taint.clone();
+        let already_branched = Arc::new(Mutex::new(self.already_branched.clone()));
+        let clone_already_branched = already_branched.clone();
+        let conservative = self.conservative.clone();
+        let dex = self.dex.clone();
+        self.branches
+            .par_iter_mut()
+            .filter(|b| !b.finished)
+            .for_each(move |b| {
+                if b.pc != InstructionOffset(0) && b.previous_pc == b.pc {
+                    b.finished = true;
+                    // log::debug!("WE DID NOT STEP {:?}", self.method.get(&b.pc));
+                    return;
+                }
+                b.previous_pc = b.pc;
+                let instruction = if let Some(instruction) = method.get(&b.pc) {
+                    instruction
+                } else {
+                    // branches_to_remove.push(b.id);
+                    b.finished = true;
+                    log::debug!("NO INSTRUCTION FOUND AT {:?}", b.pc);
+                    return;
+                };
 
-            match instruction.1 {
-                Instruction::ArbitraryData(_) => {}
-                // Flow Control
-                Instruction::Goto8(offset) => {
-                    b.pc += offset as i32;
-                    continue;
-                }
-                Instruction::Goto16(offset) => {
-                    b.pc += offset as i32;
-                    continue;
-                }
-                Instruction::Goto32(offset) => {
-                    b.pc += offset as i32;
-                    continue;
-                }
-                // we can ignore check casts and just do nothing
-                Instruction::CheckCast(..) => {}
+                match instruction.1 {
+                    Instruction::ArbitraryData(_) => {}
+                    // Flow Control
+                    Instruction::Goto8(offset) => {
+                        b.pc += offset as i32;
+                        return;
+                    }
+                    Instruction::Goto16(offset) => {
+                        b.pc += offset as i32;
+                        return;
+                    }
+                    Instruction::Goto32(offset) => {
+                        b.pc += offset as i32;
+                        return;
+                    }
+                    // we can ignore check casts and just do nothing
+                    Instruction::CheckCast(..) => {}
 
-                Instruction::Test(test, left, right, offset) => {
-                    if self
-                        .already_branched
-                        .iter()
-                        .any(|(id, offset)| offset == &b.pc && id == &b.id)
-                    {
-                        branches_to_taint.push(b.id);
-                        for b in self.already_branched.iter()
-                        // .filter(|(_, offset)| offset == &b.pc)
+                    Instruction::Test(test, left, right, offset) => {
+                        if already_branched
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|(id, offset)| offset == &b.pc && id == &b.id)
                         {
-                            branches_to_taint.push(b.0);
-                        }
-                        b.pc += instruction.0 .0 / 2;
-                        log::debug!("We have already branched, continue normal flow without jump");
-                        continue;
-                    }
-                    b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
-                    self.already_branched.push((b.id, b.pc));
-                    if let (Some(left), Some(right)) = (
-                        b.state.registers[u8::from(left) as usize].try_get_number(),
-                        b.state.registers[u8::from(right) as usize].try_get_number(),
-                    ) {
-                        log::warn!("DEAD BRANCH: {:?}", instruction);
-                        let jump_to_offset = match test {
-                            coeus_models::models::TestFunction::Equal => left == right,
-                            coeus_models::models::TestFunction::NotEqual => left != right,
-                            coeus_models::models::TestFunction::LessThan => left < right,
-                            coeus_models::models::TestFunction::LessEqual => left <= right,
-                            coeus_models::models::TestFunction::GreaterThan => left > right,
-                            coeus_models::models::TestFunction::GreaterEqual => left >= right,
-                        };
-                        if jump_to_offset {
-                            b.pc += offset as i32;
-                            continue;
-                        }
-                    } else {
-                        if self.conservative
-                            || matches!(b.state.registers[u8::from(left) as usize], Value::Empty)
-                            || matches!(b.state.registers[u8::from(right) as usize], Value::Empty)
-                        {
-                            b.state.tainted = true;
-                        }
-                        let mut new_branch = b.clone();
-                        new_branch.parent_id = Some(b.id);
-                        new_branch.pc += offset as i32;
-                        new_branch.state.loop_count = HashMap::new();
-                        branches_to_add.push((b.pc, new_branch));
-                    }
-                }
-                Instruction::TestZero(test, left, offset) => {
-                    if self
-                        .already_branched
-                        .iter()
-                        .any(|(id, offset)| offset == &b.pc && &b.id == id)
-                    {
-                        branches_to_taint.push(b.id);
-                        for b in self.already_branched.iter()
-                        // .filter(|(_, offset)| offset == &b.pc)
-                        {
-                            branches_to_taint.push(b.0);
-                        }
-                        b.pc += instruction.0 .0 / 2;
-                        log::debug!("We have already branched, continue normal flow without jump");
-                        continue;
-                    }
-                    b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
-                    self.already_branched.push((b.id, b.pc));
-                    if let Some(left) = b.state.registers[u8::from(left) as usize].try_get_number()
-                    {
-                        log::warn!("DEAD BRANCH");
-                        let jump_to_offset = match test {
-                            coeus_models::models::TestFunction::Equal => left == 0,
-                            coeus_models::models::TestFunction::NotEqual => left != 0,
-                            coeus_models::models::TestFunction::LessThan => left < 0,
-                            coeus_models::models::TestFunction::LessEqual => left <= 0,
-                            coeus_models::models::TestFunction::GreaterThan => left > 0,
-                            coeus_models::models::TestFunction::GreaterEqual => left >= 0,
-                        };
-                        if jump_to_offset {
-                            b.pc += offset as i32;
-                            continue;
-                        }
-                    } else {
-                        if self.conservative
-                            || matches!(b.state.registers[u8::from(left) as usize], Value::Empty)
-                        {
-                            b.state.tainted = true;
-                        }
-                        let mut new_branch = b.clone();
-                        new_branch.pc += offset as i32;
-                        new_branch.parent_id = Some(b.id);
-                        new_branch.state.loop_count = HashMap::new();
-                        branches_to_add.push((b.pc, new_branch));
-                    }
-                }
-                Instruction::Switch(_, table_offset) => {
-                    if let Some((_, Instruction::SwitchData(switch))) =
-                        self.method.get(&(b.pc + table_offset))
-                    {
-                        for (_, offset) in &switch.targets {
-                            if self
-                                .already_branched
-                                .iter()
-                                .any(|(_, offset)| offset == &b.pc)
+                            branches_to_taint.lock().unwrap().push(b.id);
+                            for b in already_branched.lock().unwrap().iter()
+                            // .filter(|(_, offset)| offset == &b.pc)
                             {
-                                continue;
+                                branches_to_taint.lock().unwrap().push(b.0);
+                            }
+                            b.pc += instruction.0 .0 / 2;
+                            log::debug!(
+                                "We have already branched, continue normal flow without jump"
+                            );
+                            return;
+                        }
+                        b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
+                        already_branched.lock().unwrap().push((b.id, b.pc));
+                        if let (Some(left), Some(right)) = (
+                            b.state.registers[u8::from(left) as usize].try_get_number(),
+                            b.state.registers[u8::from(right) as usize].try_get_number(),
+                        ) {
+                            log::warn!("DEAD BRANCH: {:?}", instruction);
+                            let jump_to_offset = match test {
+                                coeus_models::models::TestFunction::Equal => left == right,
+                                coeus_models::models::TestFunction::NotEqual => left != right,
+                                coeus_models::models::TestFunction::LessThan => left < right,
+                                coeus_models::models::TestFunction::LessEqual => left <= right,
+                                coeus_models::models::TestFunction::GreaterThan => left > right,
+                                coeus_models::models::TestFunction::GreaterEqual => left >= right,
+                            };
+                            if jump_to_offset {
+                                b.pc += offset as i32;
+                                return;
+                            }
+                        } else {
+                            if conservative
+                                || matches!(
+                                    b.state.registers[u8::from(left) as usize],
+                                    Value::Empty
+                                )
+                                || matches!(
+                                    b.state.registers[u8::from(right) as usize],
+                                    Value::Empty
+                                )
+                            {
+                                b.state.tainted = true;
                             }
                             let mut new_branch = b.clone();
                             new_branch.parent_id = Some(b.id);
-                            new_branch.pc += *offset as i32;
-                            branches_to_add.push((b.pc, new_branch));
+                            new_branch.pc += offset as i32;
+                            new_branch.state.loop_count = HashMap::new();
+                            branches_to_add.lock().unwrap().push((b.pc, new_branch));
                         }
                     }
-                    // branches_to_remove.push(b.id);
-                    b.finished = true;
-                    continue;
-                }
+                    Instruction::TestZero(test, left, offset) => {
+                        if already_branched
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|(id, offset)| offset == &b.pc && &b.id == id)
+                        {
+                            branches_to_taint.lock().unwrap().push(b.id);
+                            for b in already_branched.lock().unwrap().iter()
+                            // .filter(|(_, offset)| offset == &b.pc)
+                            {
+                                branches_to_taint.lock().unwrap().push(b.0);
+                            }
+                            b.pc += instruction.0 .0 / 2;
+                            log::debug!(
+                                "We have already branched, continue normal flow without jump"
+                            );
+                            return;
+                        }
+                        b.state.loop_count.entry(b.pc).or_insert(0).add_assign(1);
+                        already_branched.lock().unwrap().push((b.id, b.pc));
+                        if let Some(left) =
+                            b.state.registers[u8::from(left) as usize].try_get_number()
+                        {
+                            log::warn!("DEAD BRANCH");
+                            let jump_to_offset = match test {
+                                coeus_models::models::TestFunction::Equal => left == 0,
+                                coeus_models::models::TestFunction::NotEqual => left != 0,
+                                coeus_models::models::TestFunction::LessThan => left < 0,
+                                coeus_models::models::TestFunction::LessEqual => left <= 0,
+                                coeus_models::models::TestFunction::GreaterThan => left > 0,
+                                coeus_models::models::TestFunction::GreaterEqual => left >= 0,
+                            };
+                            if jump_to_offset {
+                                b.pc += offset as i32;
+                                return;
+                            }
+                        } else {
+                            if conservative
+                                || matches!(
+                                    b.state.registers[u8::from(left) as usize],
+                                    Value::Empty
+                                )
+                            {
+                                b.state.tainted = true;
+                            }
+                            let mut new_branch = b.clone();
+                            new_branch.pc += offset as i32;
+                            new_branch.parent_id = Some(b.id);
+                            new_branch.state.loop_count = HashMap::new();
+                            branches_to_add.lock().unwrap().push((b.pc, new_branch));
+                        }
+                    }
+                    Instruction::Switch(_, table_offset) => {
+                        if let Some((_, Instruction::SwitchData(switch))) =
+                            method.get(&(b.pc + table_offset))
+                        {
+                            for (_, offset) in &switch.targets {
+                                if already_branched
+                                    .lock()
+                                    .unwrap()
+                                    .iter()
+                                    .any(|(_, offset)| offset == &b.pc)
+                                {
+                                    continue;
+                                }
+                                let mut new_branch = b.clone();
+                                new_branch.parent_id = Some(b.id);
+                                new_branch.pc += *offset as i32;
+                                branches_to_add.lock().unwrap().push((b.pc, new_branch));
+                            }
+                        }
+                        // branches_to_remove.push(b.id);
+                        b.finished = true;
+                        return;
+                    }
 
-                //basic arithmetic
-                Instruction::XorInt(left, right) | Instruction::XorLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        ^ &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::XorIntDst(dst, left, right)
-                | Instruction::XorLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        ^ &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::XorIntDstLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] ^ (lit as i128)
-                }
-                Instruction::XorIntDstLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] ^ (lit as i128)
-                }
-                Instruction::RemIntDst(dst, left, right)
-                | Instruction::RemLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        % &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::RemInt(left, right) | Instruction::RemLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        % &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::RemIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] % (lit as i128)
-                }
-                Instruction::RemIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] % (lit as i128)
-                }
+                    //basic arithmetic
+                    Instruction::XorInt(left, right) | Instruction::XorLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            ^ &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::XorIntDst(dst, left, right)
+                    | Instruction::XorLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            ^ &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::XorIntDstLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] ^ (lit as i128)
+                    }
+                    Instruction::XorIntDstLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] ^ (lit as i128)
+                    }
+                    Instruction::RemIntDst(dst, left, right)
+                    | Instruction::RemLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            % &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::RemInt(left, right) | Instruction::RemLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            % &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::RemIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] % (lit as i128)
+                    }
+                    Instruction::RemIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] % (lit as i128)
+                    }
 
-                Instruction::AddInt(left, right) | Instruction::AddLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        + &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::AddIntDst(dst, left, right)
-                | Instruction::AddLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        + &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::AddIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] + (lit as i128)
-                }
-                Instruction::AddIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] + (lit as i128)
-                }
+                    Instruction::AddInt(left, right) | Instruction::AddLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            + &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::AddIntDst(dst, left, right)
+                    | Instruction::AddLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            + &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::AddIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] + (lit as i128)
+                    }
+                    Instruction::AddIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] + (lit as i128)
+                    }
 
-                Instruction::SubInt(left, right) | Instruction::SubLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        - &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::SubIntDst(dst, left, right)
-                | Instruction::SubLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        - &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::SubIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] - (lit as i128)
-                }
-                Instruction::SubIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] - (lit as i128)
-                }
+                    Instruction::SubInt(left, right) | Instruction::SubLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            - &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::SubIntDst(dst, left, right)
+                    | Instruction::SubLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            - &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::SubIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] - (lit as i128)
+                    }
+                    Instruction::SubIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] - (lit as i128)
+                    }
 
-                Instruction::MulInt(left, right) | Instruction::MulLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        * &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::MulIntDst(dst, left, right)
-                | Instruction::MulLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        * &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::MulIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] * (lit as i128)
-                }
-                Instruction::MulIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] * (lit as i128)
-                }
+                    Instruction::MulInt(left, right) | Instruction::MulLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            * &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::MulIntDst(dst, left, right)
+                    | Instruction::MulLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            * &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::MulIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] * (lit as i128)
+                    }
+                    Instruction::MulIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] * (lit as i128)
+                    }
 
-                Instruction::DivInt(left, right) | Instruction::DivLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        / &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::DivIntDst(dst, left, right)
-                | Instruction::DivLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        / &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::DivIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] / (lit as i128)
-                }
-                Instruction::DivIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] / (lit as i128)
-                }
+                    Instruction::DivInt(left, right) | Instruction::DivLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            / &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::DivIntDst(dst, left, right)
+                    | Instruction::DivLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            / &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::DivIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] / (lit as i128)
+                    }
+                    Instruction::DivIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] / (lit as i128)
+                    }
 
-                Instruction::AndInt(left, right) | Instruction::AndLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        & &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::AndLongDst(dst, left, right)
-                | Instruction::AndIntDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        & &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::AndIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] & (lit as i128)
-                }
-                Instruction::AndIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] & (lit as i128)
-                }
+                    Instruction::AndInt(left, right) | Instruction::AndLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            & &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::AndLongDst(dst, left, right)
+                    | Instruction::AndIntDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            & &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::AndIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] & (lit as i128)
+                    }
+                    Instruction::AndIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] & (lit as i128)
+                    }
 
-                Instruction::OrInt(left, right) | Instruction::OrLong(left, right) => {
-                    b.state.registers[u8::from(left) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        | &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::OrIntDst(dst, left, right)
-                | Instruction::OrLongDst(dst, left, right) => {
-                    b.state.registers[u8::from(dst) as usize] = &b.state.registers
-                        [u8::from(left) as usize]
-                        | &b.state.registers[u8::from(right) as usize]
-                }
-                Instruction::OrIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] | (lit as i128)
-                }
-                Instruction::OrIntLit16(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] | (lit as i128)
-                }
+                    Instruction::OrInt(left, right) | Instruction::OrLong(left, right) => {
+                        b.state.registers[u8::from(left) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            | &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::OrIntDst(dst, left, right)
+                    | Instruction::OrLongDst(dst, left, right) => {
+                        b.state.registers[u8::from(dst) as usize] = &b.state.registers
+                            [u8::from(left) as usize]
+                            | &b.state.registers[u8::from(right) as usize]
+                    }
+                    Instruction::OrIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] | (lit as i128)
+                    }
+                    Instruction::OrIntLit16(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] | (lit as i128)
+                    }
 
-                // invocations
-                Instruction::Invoke(_) => {}
-                Instruction::InvokeType(_) => {}
+                    // invocations
+                    Instruction::Invoke(_) => {}
+                    Instruction::InvokeType(_) => {}
 
-                Instruction::InvokeInterface(_, method, ref regs) => {
-                    let m = &self.dex.methods[method as usize];
-                    let proto = &self.dex.protos[m.proto_idx as usize];
+                    Instruction::InvokeInterface(_, method, ref regs) => {
+                        let m = &dex.methods[method as usize];
+                        let proto = &dex.protos[m.proto_idx as usize];
 
-                    let sig = proto.to_string(&self.dex);
-                    let return_type = proto.get_return_type(&self.dex);
-                    let class_name = self.dex.get_type_name(m.class_idx).unwrap_or_default();
-                    let class = self
-                        .dex
-                        .get_class_by_type_name_idx(m.class_idx)
-                        .unwrap_or(Arc::new(Class {
-                            class_name: class_name.to_string(),
-                            class_idx: m.class_idx as u32,
-                            ..Default::default()
-                        }))
-                        .clone();
-                    let impls = self.dex.get_implementations_for(&class);
-                    let mut args = regs
-                        .iter()
-                        .map(|a| b.state.registers[*a as usize].clone())
-                        .collect::<Vec<_>>();
-                    if impls.len() == 1 {
-                        let (_f, new_class) = &impls[0];
-                        args[0] = Value::Object {
-                            ty: new_class.class_name.clone(),
-                        };
-                        for v in &new_class.codes {
-                            if v.method.method_name == m.method_name {
+                        let sig = proto.to_string(&dex);
+                        let return_type = proto.get_return_type(&dex);
+                        let class_name = dex.get_type_name(m.class_idx).unwrap_or_default();
+                        let class = dex
+                            .get_class_by_type_name_idx(m.class_idx)
+                            .unwrap_or(Arc::new(Class {
+                                class_name: class_name.to_string(),
+                                class_idx: m.class_idx as u32,
+                                ..Default::default()
+                            }))
+                            .clone();
+                        let impls = dex.get_implementations_for(&class);
+                        let mut args = regs
+                            .iter()
+                            .map(|a| b.state.registers[*a as usize].clone())
+                            .collect::<Vec<_>>();
+                        if impls.len() == 1 {
+                            let (_f, new_class) = &impls[0];
+                            args[0] = Value::Object {
+                                ty: new_class.class_name.clone(),
+                            };
+                            for v in &new_class.codes {
+                                if v.method.method_name == m.method_name {
+                                    let function_call = LastInstruction::FunctionCall {
+                                        name: v.method.method_name.clone(),
+                                        method: v.method.clone(),
+                                        class_name: new_class.class_name.to_string(),
+                                        class: new_class.clone(),
+                                        signature: format!(
+                                            "{}->{}{}",
+                                            new_class.class_name, m.method_name, sig
+                                        ),
+                                        args: args.clone(),
+                                        result: if return_type == "V" {
+                                            None
+                                        } else {
+                                            Some(Value::Object {
+                                                ty: return_type.clone(),
+                                            })
+                                        },
+                                    };
+                                    b.state.last_instruction = Some(function_call);
+                                }
+                            }
+                            if b.state.last_instruction.is_none() {
                                 let function_call = LastInstruction::FunctionCall {
-                                    name: v.method.method_name.clone(),
-                                    method: v.method.clone(),
-                                    class_name: new_class.class_name.to_string(),
-                                    class: new_class.clone(),
-                                    signature: format!(
-                                        "{}->{}{}",
-                                        new_class.class_name, m.method_name, sig
-                                    ),
-                                    args: args.clone(),
+                                    name: m.method_name.clone(),
+                                    method: m.clone(),
+                                    class_name: class_name.to_string(),
+                                    class,
+                                    signature: format!("{}->{}{}", class_name, m.method_name, sig),
+                                    args,
                                     result: if return_type == "V" {
                                         None
                                     } else {
-                                        Some(Value::Object {
-                                            ty: return_type.clone(),
-                                        })
+                                        Some(Value::Object { ty: return_type })
                                     },
                                 };
                                 b.state.last_instruction = Some(function_call);
                             }
-                        }
-                        if b.state.last_instruction.is_none() {
+                        } else {
                             let function_call = LastInstruction::FunctionCall {
                                 name: m.method_name.clone(),
                                 method: m.clone(),
@@ -1418,7 +1476,30 @@ impl InstructionFlow {
                             };
                             b.state.last_instruction = Some(function_call);
                         }
-                    } else {
+                    }
+
+                    Instruction::InvokeVirtual(_, method, ref regs)
+                    | Instruction::InvokeSuper(_, method, ref regs)
+                    | Instruction::InvokeDirect(_, method, ref regs)
+                    | Instruction::InvokeStatic(_, method, ref regs) => {
+                        let m = &dex.methods[method as usize];
+                        let proto = &dex.protos[m.proto_idx as usize];
+
+                        let sig = proto.to_string(&dex);
+                        let return_type = proto.get_return_type(&dex);
+                        let class_name = dex.get_type_name(m.class_idx).unwrap_or_default();
+                        let class = dex
+                            .get_class_by_type_name_idx(m.class_idx)
+                            .unwrap_or(Arc::new(Class {
+                                class_name: class_name.to_string(),
+                                class_idx: m.class_idx as u32,
+                                ..Default::default()
+                            }))
+                            .clone();
+                        let args = regs
+                            .iter()
+                            .map(|a| b.state.registers[*a as usize].clone())
+                            .collect::<Vec<_>>();
                         let function_call = LastInstruction::FunctionCall {
                             name: m.method_name.clone(),
                             method: m.clone(),
@@ -1434,388 +1515,346 @@ impl InstructionFlow {
                         };
                         b.state.last_instruction = Some(function_call);
                     }
-                }
 
-                Instruction::InvokeVirtual(_, method, ref regs)
-                | Instruction::InvokeSuper(_, method, ref regs)
-                | Instruction::InvokeDirect(_, method, ref regs)
-                | Instruction::InvokeStatic(_, method, ref regs) => {
-                    let m = &self.dex.methods[method as usize];
-                    let proto = &self.dex.protos[m.proto_idx as usize];
-
-                    let sig = proto.to_string(&self.dex);
-                    let return_type = proto.get_return_type(&self.dex);
-                    let class_name = self.dex.get_type_name(m.class_idx).unwrap_or_default();
-                    let class = self
-                        .dex
-                        .get_class_by_type_name_idx(m.class_idx)
-                        .unwrap_or(Arc::new(Class {
-                            class_name: class_name.to_string(),
-                            class_idx: m.class_idx as u32,
-                            ..Default::default()
-                        }))
-                        .clone();
-                    let args = regs
-                        .iter()
-                        .map(|a| b.state.registers[*a as usize].clone())
-                        .collect::<Vec<_>>();
-                    let function_call = LastInstruction::FunctionCall {
-                        name: m.method_name.clone(),
-                        method: m.clone(),
-                        class_name: class_name.to_string(),
-                        class,
-                        signature: format!("{}->{}{}", class_name, m.method_name, sig),
-                        args,
-                        result: if return_type == "V" {
-                            None
-                        } else {
-                            Some(Value::Object { ty: return_type })
-                        },
-                    };
-                    b.state.last_instruction = Some(function_call);
-                }
-
-                Instruction::InvokeVirtualRange(_, method, _)
-                | Instruction::InvokeSuperRange(_, method, _)
-                | Instruction::InvokeDirectRange(_, method, _)
-                | Instruction::InvokeStaticRange(_, method, _)
-                | Instruction::InvokeInterfaceRange(_, method, _) => {
-                    let m = &self.dex.methods[method as usize];
-                    let proto = &self.dex.protos[m.proto_idx as usize];
-                    let sig = proto.to_string(&self.dex);
-                    let return_type = proto.get_return_type(&self.dex);
-                    let class_name = self.dex.get_type_name(m.class_idx).unwrap_or_default();
-                    let class = self
-                        .dex
-                        .get_class_by_type_name_idx(m.class_idx)
-                        .unwrap_or(Arc::new(Class {
-                            class_name: class_name.to_string(),
-                            class_idx: m.class_idx as u32,
-                            ..Default::default()
-                        }))
-                        .clone();
-                    let args = vec![];
-                    let function_call = LastInstruction::FunctionCall {
-                        name: m.method_name.clone(),
-                        method: m.clone(),
-                        class_name: class_name.to_string(),
-                        class,
-                        signature: format!("{}->{}{}", class_name, m.method_name, sig),
-                        args,
-                        result: if return_type == "V" {
-                            None
-                        } else {
-                            Some(Value::Object { ty: return_type })
-                        },
-                    };
-                    b.state.last_instruction = Some(function_call);
-                }
-
-                // const
-                Instruction::ConstLit4(reg, val) => {
-                    b.state.registers[u8::from(reg) as usize] = Value::Number(i8::from(val) as i128)
-                }
-                Instruction::ConstLit16(reg, val) => {
-                    b.state.registers[reg as usize] = Value::Number(val as i128)
-                }
-                Instruction::ConstLit32(reg, val) => {
-                    b.state.registers[reg as usize] = Value::Number(val as i128)
-                }
-
-                Instruction::ConstString(reg, str_idx) => {
-                    b.state.registers[reg as usize] = self
-                        .dex
-                        .get_string(str_idx)
-                        .map(|a| Value::String(a.to_string()))
-                        .unwrap_or(Value::Unknown {
-                            ty: String::from("Ljava/lang/String;"),
-                        });
-                }
-                Instruction::ConstStringJumbo(reg, str_idx) => {
-                    b.state.registers[reg as usize] = self
-                        .dex
-                        .get_string(str_idx as usize)
-                        .map(|a| Value::String(a.to_string()))
-                        .unwrap_or(Value::Unknown {
-                            ty: String::from("Ljava/lang/String;"),
-                        })
-                }
-                Instruction::ConstClass(reg, c) => {
-                    let class_name = self
-                        .dex
-                        .get_class_name(c)
-                        .map(|a| Value::Unknown { ty: a.to_string() })
-                        .unwrap_or(Value::Unknown {
-                            ty: String::from("TYPE NOT FOUND"),
-                        });
-                    b.state.registers[reg as usize] = class_name;
-                }
-                Instruction::Const => {}
-                Instruction::ConstWide => {}
-
-                // casts
-                Instruction::IntToByte(dst, src) => {
-                    if let Value::Number(numb) = b.state.registers[u8::from(src) as usize] {
-                        b.state.registers[u8::from(dst) as usize] = Value::Byte(numb as u8);
-                    }
-                }
-                Instruction::IntToChar(dst, src) => {
-                    if let Value::Number(numb) = b.state.registers[u8::from(src) as usize] {
-                        b.state.registers[u8::from(dst) as usize] = Value::Char(numb as u8 as char);
-                    }
-                }
-
-                // new instances and arrays
-                Instruction::ArrayLength(dst, array) => {
-                    if let Value::Bytes(ref v) = b.state.registers[u8::from(array) as usize] {
-                        b.state.registers[u8::from(dst) as usize] = Value::Number(v.len() as i128);
-                    } else {
-                        b.state.registers[u8::from(dst) as usize] = Value::Invalid;
-                    }
-                }
-                Instruction::NewInstance(reg, ty) => {
-                    if let Some(type_name) = self.dex.get_type_name(ty) {
-                        b.state.registers[reg as usize] = Value::Object {
-                            ty: type_name.to_string(),
-                        };
-                    } else {
-                        b.state.registers[reg as usize] = Value::Unknown {
-                            ty: format!("UNKNOWN"),
-                        };
-                    }
-                }
-                Instruction::NewInstanceType(_) => {}
-                Instruction::NewArray(_, _, _) => {}
-                Instruction::FilledNewArray(_, _, _) => {}
-                Instruction::FilledNewArrayRange(_, _, _) => {}
-                Instruction::FillArrayData(_, _) => {}
-                Instruction::ArrayGetByte(dst, arr_reg, index_reg) => {
-                    if let (Value::Bytes(a), Value::Number(index)) = (
-                        &b.state.registers[arr_reg as usize],
-                        &b.state.registers[index_reg as usize],
-                    ) {
-                        b.state.registers[dst as usize] = Value::Byte(a[*index as usize]);
-                    } else {
-                        b.state.registers[dst as usize] = Value::Empty;
-                    }
-                }
-                Instruction::ArrayPutByte(src, arr_reg, index_reg) => {
-                    let index = if let Value::Number(n) = b.state.registers[index_reg as usize] {
-                        Some(n)
-                    } else {
-                        None
-                    };
-                    let byte = if let Value::Byte(b) = &b.state.registers[src as usize] {
-                        Some(*b)
-                    } else {
-                        None
-                    };
-                    if let (Value::Bytes(a), Some(index)) =
-                        (&mut b.state.registers[arr_reg as usize], index)
-                    {
-                        if let Some(b) = byte {
-                            a[index as usize] = b;
-                        }
-                    }
-                }
-                Instruction::ArrayGetChar(dst, arr_reg, index_reg) => {
-                    if let (Value::Bytes(a), Value::Number(index)) = (
-                        &b.state.registers[arr_reg as usize],
-                        &b.state.registers[index_reg as usize],
-                    ) {
-                        b.state.registers[dst as usize] = Value::Char(a[*index as usize] as char);
-                    } else {
-                        b.state.registers[dst as usize] = Value::Empty;
-                    }
-                }
-                Instruction::ArrayPutChar(src, arr_reg, index_reg) => {
-                    let index = if let Value::Number(n) = b.state.registers[index_reg as usize] {
-                        Some(n)
-                    } else {
-                        None
-                    };
-                    let byte = if let Value::Char(b) = &b.state.registers[src as usize] {
-                        Some(*b)
-                    } else {
-                        None
-                    };
-                    if let (Value::Bytes(a), Some(index)) =
-                        (&mut b.state.registers[arr_reg as usize], index)
-                    {
-                        if let Some(b) = byte {
-                            a[index as usize] = b as u8;
-                        }
-                    }
-                }
-
-                // FieldAccess
-                Instruction::StaticGet(dst, field)
-                | Instruction::StaticGetObject(dst, field)
-                | Instruction::StaticGetBoolean(dst, field)
-                | Instruction::StaticGetByte(dst, field)
-                | Instruction::StaticGetChar(dst, field)
-                | Instruction::StaticGetShort(dst, field) => {
-                    let dst: u8 = (dst).into();
-                    b.state.registers[dst as usize] = Value::Empty;
-                    if let Some(field) = self.dex.fields.get(field as usize) {
-                        let class_name = self
-                            .dex
-                            .get_type_name(field.class_idx)
-                            .unwrap_or_default()
-                            .to_string();
-                        let class = self
-                            .dex
-                            .get_class_by_type(field.class_idx)
+                    Instruction::InvokeVirtualRange(_, method, _)
+                    | Instruction::InvokeSuperRange(_, method, _)
+                    | Instruction::InvokeDirectRange(_, method, _)
+                    | Instruction::InvokeStaticRange(_, method, _)
+                    | Instruction::InvokeInterfaceRange(_, method, _) => {
+                        let m = &dex.methods[method as usize];
+                        let proto = &dex.protos[m.proto_idx as usize];
+                        let sig = proto.to_string(&dex);
+                        let return_type = proto.get_return_type(&dex);
+                        let class_name = dex.get_type_name(m.class_idx).unwrap_or_default();
+                        let class = dex
+                            .get_class_by_type_name_idx(m.class_idx)
                             .unwrap_or(Arc::new(Class {
                                 class_name: class_name.to_string(),
-                                class_idx: field.class_idx as u32,
+                                class_idx: m.class_idx as u32,
                                 ..Default::default()
                             }))
                             .clone();
-                        b.state.last_instruction = Some(LastInstruction::ReadStaticField {
-                            file: self.dex.clone(),
+                        let args = vec![];
+                        let function_call = LastInstruction::FunctionCall {
+                            name: m.method_name.clone(),
+                            method: m.clone(),
+                            class_name: class_name.to_string(),
                             class,
-                            class_name,
-                            field: field.clone(),
-                            name: field.name.to_string(),
-                        });
+                            signature: format!("{}->{}{}", class_name, m.method_name, sig),
+                            args,
+                            result: if return_type == "V" {
+                                None
+                            } else {
+                                Some(Value::Object { ty: return_type })
+                            },
+                        };
+                        b.state.last_instruction = Some(function_call);
                     }
-                }
-                Instruction::StaticGetWide(dst, field) => {
-                    let dst: u8 = (dst).into();
-                    b.state.registers[dst as usize] = Value::Empty;
-                    b.state.registers[dst as usize + 1] = Value::Empty;
-                    if let Some(field) = self.dex.fields.get(field as usize) {
-                        let class_name = self
-                            .dex
-                            .get_type_name(field.class_idx)
-                            .unwrap_or_default()
-                            .to_string();
-                        let class = self
-                            .dex
-                            .get_class_by_type_name_idx(field.class_idx)
-                            .unwrap_or(Arc::new(Class {
-                                class_name: class_name.to_string(),
-                                class_idx: field.class_idx as u32,
-                                ..Default::default()
-                            }))
-                            .clone();
-                        b.state.last_instruction = Some(LastInstruction::ReadStaticField {
-                            file: self.dex.clone(),
-                            class,
-                            class_name,
-                            field: field.clone(),
-                            name: field.name.to_string(),
-                        });
+
+                    // const
+                    Instruction::ConstLit4(reg, val) => {
+                        b.state.registers[u8::from(reg) as usize] =
+                            Value::Number(i8::from(val) as i128)
                     }
-                }
-                Instruction::StaticPut(_, _) => {}
-                Instruction::StaticPutWide(_, _) => {}
-                Instruction::StaticPutObject(_, _) => {}
-                Instruction::StaticPutBoolean(_, _) => {}
-                Instruction::StaticPutByte(_, _) => {}
-                Instruction::StaticPutChar(_, _) => {}
-                Instruction::StaticPutShort(_, _) => {}
-
-                Instruction::InstanceGet(dst, _, _)
-                | Instruction::InstanceGetObject(dst, _, _)
-                | Instruction::InstanceGetShort(dst, _, _)
-                | Instruction::InstanceGetBoolean(dst, _, _)
-                | Instruction::InstanceGetByte(dst, _, _)
-                | Instruction::InstanceGetChar(dst, _, _) => {
-                    let dst: u8 = (dst).into();
-                    b.state.registers[dst as usize] = Value::Empty;
-                }
-                Instruction::InstanceGetWide(dst, ..) => {
-                    let dst: u8 = (dst).into();
-                    b.state.registers[dst as usize] = Value::Empty;
-                    b.state.registers[dst as usize + 1] = Value::Empty;
-                }
-
-                Instruction::InstancePut(_, _, _) => {}
-                Instruction::InstancePutWide(_, _, _) => {}
-                Instruction::InstancePutObject(_, _, _) => {}
-                Instruction::InstancePutBoolean(_, _, _) => {}
-                Instruction::InstancePutByte(_, _, _) => {}
-                Instruction::InstancePutChar(_, _, _) => {}
-                Instruction::InstancePutShort(_, _, _) => {}
-
-                // moves
-                Instruction::Move(dst, src) | Instruction::MoveObject(dst, src) => {
-                    let dst: u8 = (dst).into();
-                    let src: u8 = (src).into();
-                    b.state.registers[dst as usize] = b.state.registers[src as usize].clone();
-                }
-                Instruction::Move16(dst, src) | Instruction::MoveObject16(dst, src) => {
-                    b.state.registers[dst as usize] = b.state.registers[src as usize].clone();
-                }
-
-                Instruction::MoveResult(reg)
-                | Instruction::MoveResultWide(reg)
-                | Instruction::MoveResultObject(reg) => {
-                    if let Some(function_call) = &b.state.last_instruction {
-                        b.state.registers[reg as usize] =
-                            Value::Variable(Box::new(function_call.clone()));
+                    Instruction::ConstLit16(reg, val) => {
+                        b.state.registers[reg as usize] = Value::Number(val as i128)
                     }
-                }
-
-                Instruction::MoveFrom16(dst, ..)
-                | Instruction::MoveWideFrom16(dst, ..)
-                | Instruction::MoveObjectFrom16(dst, ..) => {
-                    let dst: usize = dst.into();
-                    b.state.registers[dst] = Value::Empty;
-                }
-                Instruction::MoveWide(dst, ..) => {
-                    let dst: u32 = dst.into();
-                    b.state.registers[dst as usize] = Value::Empty;
-                }
-                Instruction::MoveWide16(dst, ..) => {
-                    let dst: usize = dst.into();
-                    b.state.registers[dst] = Value::Empty;
-                }
-
-                // branch finished
-                // we also use this for unhandled instructions
-                Instruction::ReturnVoid | Instruction::Return(..) | Instruction::Throw(..) => {
-                    // branches_to_remove.push(b.id);
-                    b.finished = true;
-                    continue;
-                }
-
-                // We don't need those
-                Instruction::NotImpl(_, _) => {
-                    branches_to_taint.push(b.id);
-                    for reg in &mut b.state.registers {
-                        *reg = Value::Empty;
+                    Instruction::ConstLit32(reg, val) => {
+                        b.state.registers[reg as usize] = Value::Number(val as i128)
                     }
-                }
-                Instruction::ArrayData(_, _) => {}
-                Instruction::SwitchData(_) => {}
 
-                Instruction::ShrIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        &b.state.registers[u8::from(left) as usize] >> (lit as i128)
-                }
-                Instruction::UShrIntLit8(dst, left, lit) => {
-                    b.state.registers[u8::from(dst) as usize] =
-                        b.state.registers[u8::from(left) as usize].ushr(lit as i128)
-                }
+                    Instruction::ConstString(reg, str_idx) => {
+                        b.state.registers[reg as usize] = dex
+                            .get_string(str_idx)
+                            .map(|a| Value::String(a.to_string()))
+                            .unwrap_or(Value::Unknown {
+                                ty: String::from("Ljava/lang/String;"),
+                            });
+                    }
+                    Instruction::ConstStringJumbo(reg, str_idx) => {
+                        b.state.registers[reg as usize] = dex
+                            .get_string(str_idx as usize)
+                            .map(|a| Value::String(a.to_string()))
+                            .unwrap_or(Value::Unknown {
+                                ty: String::from("Ljava/lang/String;"),
+                            })
+                    }
+                    Instruction::ConstClass(reg, c) => {
+                        let class_name = dex
+                            .get_class_name(c)
+                            .map(|a| Value::Unknown { ty: a.to_string() })
+                            .unwrap_or(Value::Unknown {
+                                ty: String::from("TYPE NOT FOUND"),
+                            });
+                        b.state.registers[reg as usize] = class_name;
+                    }
+                    Instruction::Const => {}
+                    Instruction::ConstWide => {}
 
-                Instruction::Nop => {}
-            }
-            // reset last_function if this is not a function call
-            // and we are not in an move-result-object
-            if !is_function_call(&instruction.1)
-                && !is_move_result(&instruction.1)
-                && matches!(
-                    b.state.last_instruction,
-                    Some(LastInstruction::FunctionCall { .. })
-                )
-            {
-                b.state.last_instruction = None;
-            }
-            b.pc += instruction.0 .0 / 2;
-        }
+                    // casts
+                    Instruction::IntToByte(dst, src) => {
+                        if let Value::Number(numb) = b.state.registers[u8::from(src) as usize] {
+                            b.state.registers[u8::from(dst) as usize] = Value::Byte(numb as u8);
+                        }
+                    }
+                    Instruction::IntToChar(dst, src) => {
+                        if let Value::Number(numb) = b.state.registers[u8::from(src) as usize] {
+                            b.state.registers[u8::from(dst) as usize] =
+                                Value::Char(numb as u8 as char);
+                        }
+                    }
+
+                    // new instances and arrays
+                    Instruction::ArrayLength(dst, array) => {
+                        if let Value::Bytes(ref v) = b.state.registers[u8::from(array) as usize] {
+                            b.state.registers[u8::from(dst) as usize] =
+                                Value::Number(v.len() as i128);
+                        } else {
+                            b.state.registers[u8::from(dst) as usize] = Value::Invalid;
+                        }
+                    }
+                    Instruction::NewInstance(reg, ty) => {
+                        if let Some(type_name) = dex.get_type_name(ty) {
+                            b.state.registers[reg as usize] = Value::Object {
+                                ty: type_name.to_string(),
+                            };
+                        } else {
+                            b.state.registers[reg as usize] = Value::Unknown {
+                                ty: format!("UNKNOWN"),
+                            };
+                        }
+                    }
+                    Instruction::NewInstanceType(_) => {}
+                    Instruction::NewArray(_, _, _) => {}
+                    Instruction::FilledNewArray(_, _, _) => {}
+                    Instruction::FilledNewArrayRange(_, _, _) => {}
+                    Instruction::FillArrayData(_, _) => {}
+                    Instruction::ArrayGetByte(dst, arr_reg, index_reg) => {
+                        if let (Value::Bytes(a), Value::Number(index)) = (
+                            &b.state.registers[arr_reg as usize],
+                            &b.state.registers[index_reg as usize],
+                        ) {
+                            b.state.registers[dst as usize] = Value::Byte(a[*index as usize]);
+                        } else {
+                            b.state.registers[dst as usize] = Value::Empty;
+                        }
+                    }
+                    Instruction::ArrayPutByte(src, arr_reg, index_reg) => {
+                        let index = if let Value::Number(n) = b.state.registers[index_reg as usize]
+                        {
+                            Some(n)
+                        } else {
+                            None
+                        };
+                        let byte = if let Value::Byte(b) = b.state.registers[src as usize] {
+                            Some(b)
+                        } else {
+                            None
+                        };
+                        if let (Value::Bytes(a), Some(index)) =
+                            (&mut b.state.registers[arr_reg as usize], index)
+                        {
+                            if let Some(b) = byte {
+                                a[index as usize] = b;
+                            }
+                        }
+                    }
+                    Instruction::ArrayGetChar(dst, arr_reg, index_reg) => {
+                        if let (Value::Bytes(a), Value::Number(index)) = (
+                            &b.state.registers[arr_reg as usize],
+                            &b.state.registers[index_reg as usize],
+                        ) {
+                            b.state.registers[dst as usize] =
+                                Value::Char(a[*index as usize] as char);
+                        } else {
+                            b.state.registers[dst as usize] = Value::Empty;
+                        }
+                    }
+                    Instruction::ArrayPutChar(src, arr_reg, index_reg) => {
+                        let index = if let Value::Number(n) = b.state.registers[index_reg as usize]
+                        {
+                            Some(n)
+                        } else {
+                            None
+                        };
+                        let byte = if let Value::Char(b) = b.state.registers[src as usize] {
+                            Some(b)
+                        } else {
+                            None
+                        };
+                        if let (Value::Bytes(a), Some(index)) =
+                            (&mut b.state.registers[arr_reg as usize], index)
+                        {
+                            if let Some(b) = byte {
+                                a[index as usize] = b as u8;
+                            }
+                        }
+                    }
+
+                    // FieldAccess
+                    Instruction::StaticGet(dst, field)
+                    | Instruction::StaticGetObject(dst, field)
+                    | Instruction::StaticGetBoolean(dst, field)
+                    | Instruction::StaticGetByte(dst, field)
+                    | Instruction::StaticGetChar(dst, field)
+                    | Instruction::StaticGetShort(dst, field) => {
+                        let dst: u8 = (dst).into();
+                        b.state.registers[dst as usize] = Value::Empty;
+                        if let Some(field) = dex.fields.get(field as usize) {
+                            let class_name = dex
+                                .get_type_name(field.class_idx)
+                                .unwrap_or_default()
+                                .to_string();
+                            let class = dex
+                                .get_class_by_type(field.class_idx)
+                                .unwrap_or(Arc::new(Class {
+                                    class_name: class_name.to_string(),
+                                    class_idx: field.class_idx as u32,
+                                    ..Default::default()
+                                }))
+                                .clone();
+                            b.state.last_instruction = Some(LastInstruction::ReadStaticField {
+                                file: dex.clone(),
+                                class,
+                                class_name,
+                                field: field.clone(),
+                                name: field.name.to_string(),
+                            });
+                        }
+                    }
+                    Instruction::StaticGetWide(dst, field) => {
+                        let dst: u8 = (dst).into();
+                        b.state.registers[dst as usize] = Value::Empty;
+                        b.state.registers[dst as usize + 1] = Value::Empty;
+                        if let Some(field) = dex.fields.get(field as usize) {
+                            let class_name = dex
+                                .get_type_name(field.class_idx)
+                                .unwrap_or_default()
+                                .to_string();
+                            let class = dex
+                                .get_class_by_type_name_idx(field.class_idx)
+                                .unwrap_or(Arc::new(Class {
+                                    class_name: class_name.to_string(),
+                                    class_idx: field.class_idx as u32,
+                                    ..Default::default()
+                                }))
+                                .clone();
+                            b.state.last_instruction = Some(LastInstruction::ReadStaticField {
+                                file: dex.clone(),
+                                class,
+                                class_name,
+                                field: field.clone(),
+                                name: field.name.to_string(),
+                            });
+                        }
+                    }
+                    Instruction::StaticPut(_, _) => {}
+                    Instruction::StaticPutWide(_, _) => {}
+                    Instruction::StaticPutObject(_, _) => {}
+                    Instruction::StaticPutBoolean(_, _) => {}
+                    Instruction::StaticPutByte(_, _) => {}
+                    Instruction::StaticPutChar(_, _) => {}
+                    Instruction::StaticPutShort(_, _) => {}
+
+                    Instruction::InstanceGet(dst, _, _)
+                    | Instruction::InstanceGetObject(dst, _, _)
+                    | Instruction::InstanceGetShort(dst, _, _)
+                    | Instruction::InstanceGetBoolean(dst, _, _)
+                    | Instruction::InstanceGetByte(dst, _, _)
+                    | Instruction::InstanceGetChar(dst, _, _) => {
+                        let dst: u8 = (dst).into();
+                        b.state.registers[dst as usize] = Value::Empty;
+                    }
+                    Instruction::InstanceGetWide(dst, ..) => {
+                        let dst: u8 = (dst).into();
+                        b.state.registers[dst as usize] = Value::Empty;
+                        b.state.registers[dst as usize + 1] = Value::Empty;
+                    }
+
+                    Instruction::InstancePut(_, _, _) => {}
+                    Instruction::InstancePutWide(_, _, _) => {}
+                    Instruction::InstancePutObject(_, _, _) => {}
+                    Instruction::InstancePutBoolean(_, _, _) => {}
+                    Instruction::InstancePutByte(_, _, _) => {}
+                    Instruction::InstancePutChar(_, _, _) => {}
+                    Instruction::InstancePutShort(_, _, _) => {}
+
+                    // moves
+                    Instruction::Move(dst, src) | Instruction::MoveObject(dst, src) => {
+                        let dst: u8 = (dst).into();
+                        let src: u8 = (src).into();
+                        b.state.registers[dst as usize] = b.state.registers[src as usize].clone();
+                    }
+                    Instruction::Move16(dst, src) | Instruction::MoveObject16(dst, src) => {
+                        b.state.registers[dst as usize] = b.state.registers[src as usize].clone();
+                    }
+
+                    Instruction::MoveResult(reg)
+                    | Instruction::MoveResultWide(reg)
+                    | Instruction::MoveResultObject(reg) => {
+                        if let Some(function_call) = &b.state.last_instruction {
+                            b.state.registers[reg as usize] =
+                                Value::Variable(Box::new(function_call.clone()));
+                        }
+                    }
+
+                    Instruction::MoveFrom16(dst, ..)
+                    | Instruction::MoveWideFrom16(dst, ..)
+                    | Instruction::MoveObjectFrom16(dst, ..) => {
+                        let dst: usize = dst.into();
+                        b.state.registers[dst] = Value::Empty;
+                    }
+                    Instruction::MoveWide(dst, ..) => {
+                        let dst: u32 = dst.into();
+                        b.state.registers[dst as usize] = Value::Empty;
+                    }
+                    Instruction::MoveWide16(dst, ..) => {
+                        let dst: usize = dst.into();
+                        b.state.registers[dst] = Value::Empty;
+                    }
+
+                    // branch finished
+                    // we also use this for unhandled instructions
+                    Instruction::ReturnVoid | Instruction::Return(..) | Instruction::Throw(..) => {
+                        // branches_to_remove.push(b.id);
+                        b.finished = true;
+                        return;
+                    }
+
+                    // We don't need those
+                    Instruction::NotImpl(_, _) => {
+                        branches_to_taint.lock().unwrap().push(b.id);
+                        for reg in &mut b.state.registers {
+                            *reg = Value::Empty;
+                        }
+                    }
+                    Instruction::ArrayData(_, _) => {}
+                    Instruction::SwitchData(_) => {}
+
+                    Instruction::ShrIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            &b.state.registers[u8::from(left) as usize] >> (lit as i128)
+                    }
+                    Instruction::UShrIntLit8(dst, left, lit) => {
+                        b.state.registers[u8::from(dst) as usize] =
+                            b.state.registers[u8::from(left) as usize].ushr(lit as i128)
+                    }
+
+                    Instruction::Nop => {}
+                }
+                // reset last_function if this is not a function call
+                // and we are not in an move-result-object
+                if !is_function_call(&instruction.1)
+                    && !is_move_result(&instruction.1)
+                    && matches!(
+                        b.state.last_instruction,
+                        Some(LastInstruction::FunctionCall { .. })
+                    )
+                {
+                    b.state.last_instruction = None;
+                }
+                b.pc += instruction.0 .0 / 2;
+            });
         // for remove_id in &branches_to_remove {
         //     if let Some(b) = self.branches.iter_mut().find(|b| b.id == remove_id) {
         //         b.finished = true;
@@ -1823,8 +1862,16 @@ impl InstructionFlow {
         // }
         // self.branches
         //     .retain(|a| !branches_to_remove.iter().any(|id| &a.id == id));
-        for b_to_taint in branches_to_taint {
-            taint_recursively(b_to_taint, &mut self.branches);
+        self.already_branched = Arc::try_unwrap(clone_already_branched)
+            .unwrap()
+            .into_inner()
+            .unwrap();
+        let branches_to_taint = Arc::try_unwrap(clone_branches_to_taint)
+            .unwrap()
+            .into_inner()
+            .unwrap();
+        for b_to_taint in branches_to_taint.iter() {
+            taint_recursively(*b_to_taint, &mut self.branches);
             // self.branches
             //     .iter_mut()
             //     .filter(|b| {
@@ -1833,6 +1880,10 @@ impl InstructionFlow {
             //     })
             //     .for_each(|b| b.state.tainted = true);
         }
+        let branches_to_add = Arc::try_unwrap(clone_branches_to_add)
+            .unwrap()
+            .into_inner()
+            .unwrap();
         if self.branches.len() < 1000 {
             for (offset, b) in branches_to_add {
                 let id = self.fork(b);
@@ -1841,6 +1892,10 @@ impl InstructionFlow {
         }
     }
     fn new_branch(&mut self, pc: InstructionOffset, parent_id: Option<u64>) {
+        if self.branches.len() > 10 {
+            println!("Føk, we have too many branches");
+            return;
+        }
         self.branches.push(Branch {
             parent_id,
             id: rand::random(),

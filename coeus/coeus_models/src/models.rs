@@ -8,7 +8,7 @@
 //! It also defines a `Decode` trait which exposes a `from_bytes` function.
 //! The trait is implemented for various default types.
 
-use _core::ops::{Add, AddAssign};
+use core::ops::{Add, AddAssign};
 
 mod android;
 pub use android::*;
@@ -32,7 +32,7 @@ mod multidexfile;
 pub use multidexfile::*;
 use petgraph::dot::Dot;
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize, Eq, PartialEq)]
 /// A Method as it is present in a Dex-File. The name is added for convenience, and to save a lookup in the string table.
 pub struct Method {
     /// The index in the types pool. This indicates the class this method belongs to
@@ -66,7 +66,7 @@ impl Decode for Method {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize, PartialEq, Eq)]
 /// A field as it is present in the Dex-File. The name is added for convenience, and to save a lookup in the string table.
 pub struct Field {
     /// The index in the types pool. This indicates the class this field belongs to
@@ -178,7 +178,7 @@ impl Method {
             .to_string()
     }
 }
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub struct Proto {
     pub shorty_idx: u32,
@@ -231,7 +231,7 @@ impl Decode for Proto {
         }
     }
 }
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]
 
 pub struct StringEntry {
     pub utf16_size: u32,
@@ -280,7 +280,7 @@ impl Deref for ClassRef {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]
 
 pub struct DexHeader {
     pub magic: [u8; 8],
@@ -317,7 +317,7 @@ impl Decode for DexHeader {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub struct EncodedArray {
     items: Vec<EncodedItem>,
@@ -331,7 +331,7 @@ impl EncodedArray {
         self.items
     }
 }
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub struct EncodedItem {
     value_arg: u8,
@@ -340,7 +340,7 @@ pub struct EncodedItem {
     pub inner: Option<EncodedArray>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub enum ValueType {
     Byte,
@@ -570,7 +570,7 @@ impl_value_type!(u64, ValueType::Long, |e| {
     u64::from_le_bytes(bytes)
 });
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct MethodData {
     pub name: String,
     pub method: Arc<Method>,
@@ -669,7 +669,7 @@ impl MethodData {
 use bitflags::*;
 
 bitflags! {
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(::serde::Serialize, ::serde::Deserialize, PartialEq, Clone, Debug, Copy)]
    pub struct AccessFlags: u64 {
         const PUBLIC = 0x1;
         const PRIVATE = 0x2;
@@ -694,7 +694,7 @@ bitflags! {
 }
 
 impl std::fmt::Display for AccessFlags {
-    fn fmt(&self, f: &mut _core::fmt::Formatter<'_>) -> _core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(&self.get_string_representation())
     }
 }
@@ -744,7 +744,7 @@ impl AccessFlags {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 pub enum AnnotationVisibility {
     VisibilityBuild,
     VisibilityRuntime,
@@ -753,7 +753,7 @@ pub enum AnnotationVisibility {
 }
 
 impl std::fmt::Display for AnnotationVisibility {
-    fn fmt(&self, f: &mut _core::fmt::Formatter<'_>) -> _core::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(&self.get_string_representation())
     }
 }
@@ -769,13 +769,13 @@ impl AnnotationVisibility {
     }
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct AnnotationElementsData {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct Annotation {
     pub visibility: AnnotationVisibility,
     pub type_idx: u64,
@@ -783,7 +783,7 @@ pub struct Annotation {
     pub elements: Vec<AnnotationElementsData>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct AnnotationMethod {
     pub method_idx: u32,
     pub visibility: AnnotationVisibility,
@@ -791,7 +791,7 @@ pub struct AnnotationMethod {
     pub class_name: String,
     pub elements: Vec<AnnotationElementsData>,
 }
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct AnnotationField {
     pub field_idx: u32,
     pub visibility: AnnotationVisibility,
@@ -800,7 +800,7 @@ pub struct AnnotationField {
     pub elements: Vec<AnnotationElementsData>,
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct Class {
     pub dex_identifier: String,
     pub class_idx: u32,
@@ -889,7 +889,7 @@ impl Class {
         } else if let Some((file, class)) = md
             .classes()
             .iter()
-            .find(|(_, class)| class.class_name == class_name )
+            .find(|(_, class)| class.class_name == class_name)
         {
             (file.clone(), class.clone())
         } else {
@@ -952,7 +952,7 @@ impl Class {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 pub struct AnnotationElement {
     pub name_idx: u64,
     pub value: EncodedItem,
@@ -973,7 +973,7 @@ impl Decode for AnnotationElement {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
 pub struct EncodedAnnotation {
     pub type_idx: u64,
     pub size: u64,
@@ -1206,7 +1206,7 @@ impl Decode for ClassDefItem {
     }
 }
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub struct ClassData {
     pub static_fields_size: u64,
@@ -1293,7 +1293,7 @@ impl Decode for ClassData {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub struct EncodedField {
     pub field_idx: u32,
@@ -1312,7 +1312,7 @@ impl Decode for EncodedField {
     }
 }
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 pub struct EncodedMethod {
     pub method_idx: u32,
@@ -1336,11 +1336,29 @@ impl Decode for EncodedMethod {
 }
 
 #[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
+    Debug,
+    Clone,
+    Copy,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 pub struct InstructionSize(pub u32);
 #[derive(
-    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
+    Debug,
+    Clone,
+    Copy,
+    ::serde::Serialize,
+    ::serde::Deserialize,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
 )]
 pub struct InstructionOffset(pub u32);
 
@@ -1465,7 +1483,7 @@ impl From<InstructionSize> for usize {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize, PartialEq)]
 
 //we ignore try handlers for know
 pub struct CodeItem {
@@ -1482,7 +1500,7 @@ pub struct CodeItem {
     #[serde(skip_serializing, skip_deserializing)]
     pub switch_data: Vec<(InstructionSize, InstructionOffset, Instruction)>,
 }
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
 pub struct Switch {
     id: u32,
     pub targets: HashMap<i32, i32>,
@@ -1490,7 +1508,7 @@ pub struct Switch {
 use std::hash::Hash;
 #[allow(clippy::derive_hash_xor_eq)]
 impl Hash for Switch {
-    fn hash<H: _core::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
 }

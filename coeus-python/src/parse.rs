@@ -18,8 +18,8 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::analysis::Method;
 use crate::analysis::DexString;
+use crate::analysis::Method;
 
 #[pyclass]
 #[derive(Clone)]
@@ -64,7 +64,6 @@ impl Dex {
 
 #[pyclass]
 /// Abstract object holding all resources found. Use this as the root object for further analysis.
-#[pyo3(text_signature = "(archive, build_graph, max_depth, /)")]
 pub struct AnalyzeObject {
     pub(crate) files: Files,
     pub(crate) supergraph: Option<Arc<Supergraph>>,
@@ -105,7 +104,8 @@ impl AnalyzeObject {
         }
         let mut new = NON_INTERESTING_CLASSES.to_vec();
         new.extend(excluded_classes.iter().map(|s| s.as_str()));
-        let Ok(supergraph) = build_information_graph(&self.files.multi_dex[0], c, &new, None, None) else {
+        let Ok(supergraph) = build_information_graph(&self.files.multi_dex[0], c, &new, None, None)
+        else {
             return Err("Failed to build the graph".to_string());
         };
         let supergraph = Arc::new(supergraph);
@@ -180,8 +180,8 @@ impl AnalyzeObject {
                 Some(xml) => xml,
                 None => {
                     println!("Could not decode file {}", name);
-                    String::from("") 
-                },
+                    String::from("")
+                }
             };
             let result = xml.as_bytes();
             PyBytes::new(py, result).into()
@@ -397,14 +397,15 @@ impl AnalyzeObject {
             .map(|evidence| crate::analysis::Evidence { evidence })
             .collect())
     }
-     #[pyo3(text_signature = "($self, regex, only_symbols, /)")]
+    #[pyo3(text_signature = "($self, regex, only_symbols, /)")]
     pub fn find_strings_native(
         &self,
         regex: &str,
         only_symbols: bool,
     ) -> PyResult<Vec<crate::analysis::Evidence>> {
         let regex = Regex::new(regex).map_err(|e| PyRuntimeError::new_err(format!("{:?}", e)))?;
-        let files = coeus::coeus_analysis::analysis::find_strings_native(&regex, &self.files, only_symbols);
+        let files =
+            coeus::coeus_analysis::analysis::find_strings_native(&regex, &self.files, only_symbols);
         Ok(files
             .into_iter()
             .map(|evidence| crate::analysis::Evidence { evidence })
@@ -440,8 +441,7 @@ impl AnalyzeObject {
             .map(|evidence| {
                 let evi = crate::analysis::Evidence { evidence };
                 evi.as_class().unwrap()
-            }
-            )
+            })
             .collect();
         Ok(classes)
     }
@@ -460,11 +460,10 @@ impl AnalyzeObject {
         let mthds = get_methods(&self.files);
         let methods: Vec<Method> = mthds
             .into_iter()
-            .map(|evidence| 
-                { 
-                    let evi = crate::analysis::Evidence { evidence };
-                    evi.as_method().unwrap()
-                })
+            .map(|evidence| {
+                let evi = crate::analysis::Evidence { evidence };
+                evi.as_method().unwrap()
+            })
             .collect();
         Ok(methods)
     }
@@ -486,9 +485,9 @@ impl AnalyzeObject {
         let strings: Vec<DexString> = strings
             .into_iter()
             .map(|evidence| {
-                    let evi = crate::analysis::Evidence { evidence };
-                    evi.as_string().unwrap()
-                })
+                let evi = crate::analysis::Evidence { evidence };
+                evi.as_string().unwrap()
+            })
             .collect();
         Ok(strings)
     }
@@ -510,9 +509,9 @@ impl AnalyzeObject {
         let fields: Vec<crate::analysis::DexField> = fields
             .into_iter()
             .map(|evidence| {
-                    let evi = crate::analysis::Evidence { evidence };
-                    evi.as_field().unwrap()
-                })
+                let evi = crate::analysis::Evidence { evidence };
+                evi.as_field().unwrap()
+            })
             .collect();
         Ok(fields)
     }
@@ -527,7 +526,7 @@ impl AnalyzeObject {
     }
 }
 
-pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
+pub(crate) fn register(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<AnalyzeObject>()?;
     m.add_class::<Manifest>()?;
     Ok(())

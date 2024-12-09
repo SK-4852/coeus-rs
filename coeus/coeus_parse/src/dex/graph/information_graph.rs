@@ -1,5 +1,5 @@
 // Copyright (c) 2022 Ubique Innovation AG <https://www.ubique.ch>
-// 
+//
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -10,12 +10,12 @@ use coeus_emulation::vm::{
 };
 use coeus_macros::iterator;
 use coeus_models::models::{
-    AccessFlags, BinaryObject, Instruction, InstructionOffset, InstructionSize, MultiDexFile,
-    ValueType, Class,
+    AccessFlags, BinaryObject, Class, Instruction, InstructionOffset, InstructionSize,
+    MultiDexFile, ValueType,
 };
 use petgraph::{
     graph::{DiGraph, NodeIndex},
-    Graph, Direction,
+    Direction, Graph,
 };
 use rayon::iter::ParallelIterator;
 use std::{
@@ -37,7 +37,6 @@ use super::{
     ChangeSet, InfoNode, Supergraph,
 };
 
-
 /// Find implementations of interfaces
 pub fn find_implementations(
     super_graph: &Supergraph,
@@ -56,7 +55,6 @@ pub fn find_implementations(
     }
     classes
 }
-
 
 /// Build the super graph containing nodes from various pools and
 /// connect them in a directional graph.
@@ -118,7 +116,7 @@ pub fn build_information_graph(
 
                     // let method_index = code.method.method_idx;
                     let method_name = &code.method.method_name;
-                    let access_flags = code.access_flags;
+                    let access_flags = code.access_flags.clone();
                     // let's search all instructions an connect various nodes with this method.
                     let mut discoveries = vec![];
                     // let mut add_nodes = vec![];
@@ -198,7 +196,7 @@ pub fn build_information_graph(
                         }
 
                         // TODO maybe control it with a switch?
-                        
+
                         if method_name == "<clinit>" {
                             if let Some(class_data) = class.class_data.as_ref() {
                                 for field in &class_data.static_fields {
@@ -291,7 +289,7 @@ pub fn build_information_graph(
             nodes_to_add
         })
         .collect::<Vec<_>>();
-    add_to_graph(&mut g, &mut all_mappings,  nodes_to_add);
+    add_to_graph(&mut g, &mut all_mappings, nodes_to_add);
 
     // class_nodes.extend(type_nodes);
     Ok(Supergraph {
@@ -597,7 +595,7 @@ fn prepare_mappings(
         let method_node_index = g.add_node(InfoNode::MethodNode(method.clone(), name));
         all_mappings.insert(fqdn, method_node_index);
     }
-    for (_, string,_) in multi_dex_file.strings() {
+    for (_, string, _) in multi_dex_file.strings() {
         if let Ok(the_string) = string.to_str() {
             let the_string_key = format!("SN_{}", the_string);
             let _ = all_mappings

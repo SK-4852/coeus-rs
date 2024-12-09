@@ -49,8 +49,8 @@ pub struct UnsafeRegister {
 impl UnsafeRegister {
     #[new]
     pub fn new(py: Python, any: Py<PyAny>, unsafe_context: &mut UnsafeContext) -> PyResult<Self> {
-        if let Ok(s) = any.extract::<&str>(py) {
-            return Ok(unsafe_context.new_string(s));
+        if let Ok(s) = any.extract::<String>(py) {
+            return Ok(unsafe_context.new_string(s.as_str()));
         }
         if let Ok(b) = any.extract::<bool>(py) {
             return Ok(UnsafeRegister {
@@ -147,7 +147,7 @@ impl UnsafeContext {
     }
 }
 
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Clone)]
 pub struct DynamicPythonClass {
     class_name: String,
@@ -163,8 +163,9 @@ impl DynamicPythonClass {
         }
     }
 }
+
 impl Invokable for DynamicPythonClass {
-    fn call(
+    fn call<'py>(
         &self,
         fn_name: &str,
         vm: &mut VM,
@@ -173,11 +174,13 @@ impl Invokable for DynamicPythonClass {
         Python::with_gil(|py| {
             let args = args.to_vec();
             let unsafe_context = UnsafeContext { vm_ptr: vm, args };
-            let unsafe_context = unsafe_context.into_py(py);
+            let Ok(unsafe_context) = unsafe_context.into_pyobject(py) else {
+                return;
+            };
 
-            let py_model = self.py_class.as_ref(py);
+            let py_model = self.py_class.as_any();
             py_model
-                .call_method(fn_name, (unsafe_context,), None)
+                .call_method(py, fn_name, (unsafe_context,), None)
                 .unwrap();
         });
         Ok(())
@@ -186,18 +189,19 @@ impl Invokable for DynamicPythonClass {
 
 #[pymethods]
 impl VmResult {
-    pub fn get_value(&self, py: Python) -> Py<PyAny> {
-        match &self.data {
-            coeus::coeus_emulation::vm::Value::Array(l) => l.to_object(py),
+    pub fn get_value<'py>(&'py self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match &self.data {
+            coeus::coeus_emulation::vm::Value::Array(l) => l.into_pyobject(py)?.into_any(),
             coeus::coeus_emulation::vm::Value::Object(l) => DexClassObject {
                 class: l.clone(),
                 vm: self.vm.to_owned(),
             }
-            .into_py(py),
-            coeus::coeus_emulation::vm::Value::Int(i) => i.to_object(py),
-            coeus::coeus_emulation::vm::Value::Short(s) => s.to_object(py),
-            coeus::coeus_emulation::vm::Value::Byte(b) => b.to_object(py),
-        }
+            .into_pyobject(py)?
+            .into_any(),
+            coeus::coeus_emulation::vm::Value::Int(i) => i.into_pyobject(py)?.into_any(),
+            coeus::coeus_emulation::vm::Value::Short(s) => s.into_pyobject(py)?.into_any(),
+            coeus::coeus_emulation::vm::Value::Byte(b) => b.into_pyobject(py)?.into_any(),
+        })
     }
 }
 
@@ -303,7 +307,7 @@ impl DexVm {
     }
 }
 
-pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
+pub(crate) fn register(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<DexVm>()?;
     m.add_class::<DynamicPythonClass>()?;
     m.add_class::<UnsafeContext>()?;

@@ -13,8 +13,8 @@ use coeus::coeus_debug::{
 use pyo3::{
     exceptions::PyRuntimeError,
     pyclass, pymethods,
-    types::{PyBool, PyFloat, PyLong, PyModule, PyString},
-    IntoPy, Py, PyAny, PyResult, Python, ToPyObject,
+    types::{PyAnyMethods, PyBool, PyFloat, PyInt, PyLong, PyModule, PyModuleMethods, PyString},
+    Bound, IntoPy, Py, PyAny, PyResult, Python, ToPyObject,
 };
 
 use crate::{analysis::Method, parse::AnalyzeObject};
@@ -99,16 +99,17 @@ impl StackValue {
         value: Py<PyAny>,
         old_value: Option<&StackValue>,
     ) -> PyResult<StackValue> {
-        let val: &PyAny = value.into_ref(py);
+        let bound_val = value.bind(py);
+        let val = bound_val.as_ref();
         match val {
-            v if v.is_instance_of::<PyBool>()? => {
+            v if v.is_instance_of::<PyBool>() => {
                 let value: bool = val.extract()?;
                 let stack_value = coeus::coeus_debug::models::Value::Boolean(value as u8);
                 Ok(StackValue {
                     slot: stack_value.into(),
                 })
             }
-            v if v.is_instance_of::<PyLong>()? => {
+            v if v.is_instance_of::<PyInt>() => {
                 let stack_value = if let Some(old_value) = old_value {
                     match old_value.slot.value {
                         coeus::coeus_debug::models::Value::Int(_) => {
@@ -142,7 +143,7 @@ impl StackValue {
                     slot: stack_value.into(),
                 })
             }
-            v if v.is_instance_of::<PyFloat>()? => {
+            v if v.is_instance_of::<PyFloat>() => {
                 let stack_value = if let Some(old_value) = old_value {
                     match old_value.slot.value {
                         coeus::coeus_debug::models::Value::Float(_) => {
@@ -167,9 +168,9 @@ impl StackValue {
                     slot: stack_value.into(),
                 })
             }
-            v if v.is_instance_of::<PyString>()? => {
-                let value: &str = val.extract()?;
-                let slot = debugger.new_string(value)?;
+            v if v.is_instance_of::<PyString>() => {
+                let value: String = val.extract()?;
+                let slot = debugger.new_string(value.as_str())?;
 
                 Ok(slot)
             }
@@ -204,7 +205,7 @@ impl StackValue {
             }
             coeus::coeus_debug::models::Value::Array(a) => {
                 let Ok(values) = debugger.jdwp_client.get_array(&debugger.rt, a) else {
-                     return Err(PyRuntimeError::new_err("Could not get array"));
+                    return Err(PyRuntimeError::new_err("Could not get array"));
                 };
                 Ok(format!("{:?}", values).to_object(py))
             }
@@ -221,10 +222,13 @@ impl StackValue {
 #[pymethods]
 impl DebuggerStackFrame {
     pub fn get_values_for(&self, debugger: &mut Debugger, m: &Method) -> PyResult<Vec<StackValue>> {
-        let Some(code_item) = m.method_data.as_ref().and_then(|md|md.code.as_ref()) else {
+        let Some(code_item) = m.method_data.as_ref().and_then(|md| md.code.as_ref()) else {
             return Err(PyRuntimeError::new_err("We need code data"));
         };
-        let Ok(values) = self.stack_frame.get_values(code_item, &mut debugger.jdwp_client, &debugger.rt) else {
+        let Ok(values) =
+            self.stack_frame
+                .get_values(code_item, &mut debugger.jdwp_client, &debugger.rt)
+        else {
             return Err(PyRuntimeError::new_err("Failed to get values"));
         };
         Ok(values.into_iter().map(|slot| StackValue { slot }).collect())
@@ -368,11 +372,11 @@ impl Debugger {
         let Some(reply) = self.jdwp_client.wait_for_package_blocking(&self.rt) else {
             return Err(PyRuntimeError::new_err("Nothing"));
         };
-        let JdwpPacket::CommandPacket(cmd) = reply else  {
-           return Err(PyRuntimeError::new_err("Nothing"));
+        let JdwpPacket::CommandPacket(cmd) = reply else {
+            return Err(PyRuntimeError::new_err("Nothing"));
         };
         let Ok(composite) = Composite::try_from(cmd) else {
-             return Err(PyRuntimeError::new_err("Not composite event")); 
+            return Err(PyRuntimeError::new_err("Not composite event"));
         };
         let (Event::Breakpoint(bp) | Event::SingleStep(bp)) = &composite.events[0];
         if let Event::SingleStep(_) = &composite.events[0] {
@@ -397,7 +401,7 @@ impl Debugger {
         self.break_points.clone()
     }
 }
-pub(crate) fn register(_py: Python, m: &PyModule) -> PyResult<()> {
+pub(crate) fn register(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Debugger>()?;
     m.add_class::<DebuggerStackFrame>()?;
     m.add_class::<StackValue>()?;

@@ -13,7 +13,7 @@ use rayon::prelude::*;
 
 use super::{Class, DexHeader, Field, Method, MethodData, Proto, StringEntry};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, ::serde::Serialize, ::serde::Deserialize)]
 pub struct DexFile {
     #[serde(skip_serializing)]
     pub identifier: String,
@@ -164,7 +164,8 @@ impl DexFile {
             class
                 .codes
                 .par_iter()
-                .find_first(|c| c.method_idx == method_idx.into()).cloned()
+                .find_first(|c| c.method_idx == method_idx.into())
+                .cloned()
         } else {
             None
         }
@@ -197,11 +198,15 @@ impl DexFile {
             .par_iter()
             .find_first(|c| c.class_name == class_name)
         {
-            class.codes.par_iter().find_first(|code| {
-                code.name == method_name
-                    && code.code.is_some()
-                    && proto_type == self.protos[code.method.proto_idx as usize].to_string(self)
-            }).cloned()
+            class
+                .codes
+                .par_iter()
+                .find_first(|code| {
+                    code.name == method_name
+                        && code.code.is_some()
+                        && proto_type == self.protos[code.method.proto_idx as usize].to_string(self)
+                })
+                .cloned()
         } else {
             None
         }
