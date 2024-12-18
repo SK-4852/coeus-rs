@@ -171,6 +171,13 @@ impl AnalyzeObject {
         self.files.get_string_from_resource(id)
     }
 
+    pub fn get_resource_mipmap_file_name(&mut self, id: u32) -> Option<(String, HashMap<String,String>)> {
+        if self.files.arsc.is_none() {
+            let _ = self.files.load_arsc();
+        }
+        self.files.get_mipmap_file_name_from_resource(id)       
+    }
+
     pub fn get_file(&self, py: Python, name: &str) -> PyObject {
         let mut _file_content: String;
         let bin_object = self.files.binaries.get(name).unwrap();

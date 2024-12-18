@@ -129,4 +129,67 @@ impl Files {
         }
         Some((entry_name, localized_strings))
     }
+
+    pub fn get_mipmap_file_name_from_resource(&self, id: u32) -> Option<(String, HashMap<String, String>)> {
+        let Some(arsc) = self.arsc.as_ref() else {
+            return None;
+        };
+        let Some(pkg) = arsc.packages.iter().find(|p| p.id == ((id & 0xff_00_00_00) >> 24)) else {
+            return None
+        };
+
+        let Some(ty) = pkg.types.iter().find(|ty| ty.id == ((id & 0x00_ff_00_00) >> 16) as usize) else {
+            return None;
+        };
+
+        let mut resource_map: HashMap<String, String> = HashMap::new();
+        let mut entry_name = String::default();
+
+
+        for resource in &ty.configs {
+            if let Some(entry) = resource
+                .resources
+                .resources
+                .iter()
+                .find(|r| r.spec_id == (id as usize) & 0xff_ff)
+            {
+                
+                let den: u16 = ((resource.id[15] as u16) << 8) + resource.id[14] as u16;
+                
+                let density = match den {
+                    160 => "MDPI".to_string(),
+                    240 => "HDPI".to_string(),
+                    320 => "XHDPI".to_string(),
+                    480 => "XXHDPI".to_string(),
+                    640 => "XXXHDPI".to_string(),
+                    65534 => {
+                        let version = resource.id[24].to_string();
+                        let mut any = "ANYDPI-v".to_string();
+                        any.push_str(&version);
+                        any
+                    },
+                    _ => den.to_string(),
+                };
+
+                if let Some(name) = pkg.key_names.strings.get(entry.name_index) {
+                    entry_name = name.to_string();
+                }
+
+                match &entry.value {
+                    arsc::ResourceValue::Plain(a) => {
+                        if a.is_string() {
+                            if let Some(val) = arsc.global_string_pool.strings.get(a.data_index) {
+                                resource_map.insert(density.to_string(), val.to_string());
+                            }
+                        }
+                    }
+                    _ => continue,
+                }   
+
+            }
+        }
+
+        Some((entry_name, resource_map))
+
+    }
 }
