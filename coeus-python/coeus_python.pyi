@@ -399,3 +399,5 @@ class AnalyzeObject:
         """Get file bytes"""
     def get_resource_string(self, id: int) -> tuple[str, dict[str, str]]:
         """Lookup the string table"""
+    def get_resource_mipmap_file_name(self, id: int) -> tuple[str, dict[str, str]]:
+        """Get a mipmap file name"""

@@ -16,6 +16,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use regex::Regex;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::analysis::DexString;
@@ -169,6 +170,13 @@ impl AnalyzeObject {
             let _ = self.files.load_arsc();
         }
         self.files.get_string_from_resource(id)
+    }
+
+    pub fn get_resource_mipmap_file_name(&mut self, id: u32) -> Option<(String, HashMap<String,String>)> {
+        if self.files.arsc.is_none() {
+            let _ = self.files.load_arsc();
+        }
+        self.files.get_mipmap_file_name_from_resource(id)       
     }
 
     pub fn get_file(&self, py: Python, name: &str) -> PyObject {
