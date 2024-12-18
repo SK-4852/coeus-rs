@@ -16,7 +16,6 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 use regex::Regex;
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::analysis::DexString;
